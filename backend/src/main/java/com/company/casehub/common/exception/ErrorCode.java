@@ -19,6 +19,18 @@ public enum ErrorCode {
     PASSWORD_POLICY_VIOLATION(HttpStatus.BAD_REQUEST, "Password does not satisfy the policy requirements."),
     AUTH_CURRENT_PASSWORD_MISMATCH(HttpStatus.BAD_REQUEST, "The current password is incorrect."),
 
+    // ---- Dictionary (Phase 4) ----
+    STANDARD_NOT_FOUND(HttpStatus.NOT_FOUND, "Standard/Task Type not found."),
+    STANDARD_CODE_DUPLICATE(HttpStatus.CONFLICT, "Standard/Task Type code already exists."),
+    CATEGORY_NOT_FOUND(HttpStatus.NOT_FOUND, "Category not found."),
+    CATEGORY_CODE_DUPLICATE(HttpStatus.CONFLICT, "Category code already exists."),
+    CATEGORY_PARENT_INVALID(HttpStatus.BAD_REQUEST, "Parent category must be a level-1 category."),
+    CATEGORY_HAS_CHILDREN(HttpStatus.CONFLICT, "Cannot disable a category that has active children."),
+    TAG_NOT_FOUND(HttpStatus.NOT_FOUND, "Tag not found."),
+    TAG_NAME_DUPLICATE(HttpStatus.CONFLICT, "Tag name already exists."),
+    TOOL_NOT_FOUND(HttpStatus.NOT_FOUND, "Tool not found."),
+    TOOL_NAME_DUPLICATE(HttpStatus.CONFLICT, "Tool name already exists."),
+
     // ---- Generic (reused by later phases) ----
     VALIDATION_FAILED(HttpStatus.BAD_REQUEST, "Request validation failed."),
     RESOURCE_NOT_FOUND(HttpStatus.NOT_FOUND, "The requested resource was not found."),
