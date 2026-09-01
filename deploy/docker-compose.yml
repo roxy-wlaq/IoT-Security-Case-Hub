@@ -1,0 +1,153 @@
+# =============================================================================
+# CaseHub Production Baseline
+#
+# 服务（Final Technical Review 第 4 节）：
+#   nginx    唯一外部入口，承载 React 静态文件 + /api/ 反代
+#   backend  Spring Boot 3.x / Java 21
+#   postgres PostgreSQL 16（固定版本，禁止 latest）
+#
+# 不运行独立 frontend 应用服务器。
+#
+# 使用方式：
+#   cd deploy
+#   cp .env.example .env   # 然后修改所有 change-me-please
+#   docker compose up --build -d
+#
+# 注意：
+#   - 本文件不含任何真实密码，全部通过 ${VAR} 引用 .env
+#   - .env / 私钥 / 证书 key / 数据库 dump 禁止提交 Git
+#   - Build context 是仓库根目录（..），因此 backend/ 与 frontend/ 源码必须存在
+# =============================================================================
+
+name: casehub
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # Nginx：唯一外部入口
+  # ---------------------------------------------------------------------------
+  nginx:
+    build:
+      context: ..
+      dockerfile: deploy/nginx.Dockerfile
+    image: casehub-nginx:1.0.0
+    container_name: casehub-nginx
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      # HTTPS 就绪后改为暴露 443，并挂载 /srv/casehub/certs（见 casehub.conf 注释）
+      - "${HTTP_PORT:-80}:80"
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost/healthz || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ---------------------------------------------------------------------------
+  # Backend：Spring Boot
+  # ---------------------------------------------------------------------------
+  backend:
+    build:
+      context: ..
+      dockerfile: deploy/backend.Dockerfile
+    image: casehub-backend:1.0.0
+    container_name: casehub-backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      # 默认 prod；如需在开发环境切换，在 .env 中设置 SPRING_PROFILES_ACTIVE
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
+      # 数据源
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${POSTGRES_DB:-casehub}
+      DB_USER: ${POSTGRES_USER:-casehub}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      # 文件存储根（File Storage 文档第 4 节 / 第 85 节）
+      CASEHUB_STORAGE_ROOT: /data/casehub
+      # 必须与 nginx client_max_body_size 保持一致（当前 nginx 为 100m）
+      CASEHUB_MAX_FILE_SIZE: ${CASEHUB_MAX_FILE_SIZE:-100MB}
+      # 首次启动且不存在任何 ADMIN 用户时创建初始管理员；留空则跳过
+      CASEHUB_BOOTSTRAP_ADMIN_PASSWORD: ${CASEHUB_BOOTSTRAP_ADMIN_PASSWORD}
+      # JVM 内存，覆盖镜像默认值
+      JAVA_OPTS: ${JAVA_OPTS:--Xms512m -Xmx2g}
+      TZ: ${TZ:-UTC}
+    volumes:
+      # 生产可改为 bind mount：/srv/casehub/files:/data/casehub
+      - file-storage:/data/casehub
+    # 容器内端口 8080，不对外暴露，只由 nginx 通过内部网络访问
+    expose:
+      - "8080"
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 180s
+
+  # ---------------------------------------------------------------------------
+  # PostgreSQL 16
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:16.6-alpine
+    container_name: casehub-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-casehub}
+      POSTGRES_USER: ${POSTGRES_USER:-casehub}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      PGDATA: /var/lib/postgresql/data/pgdata
+      TZ: ${TZ:-UTC}
+    volumes:
+      # 生产可改为 bind mount：/srv/casehub/postgres:/var/lib/postgresql/data
+      - postgres-data:/var/lib/postgresql/data
+    # 生产不映射 5432 到宿主机；维护走临时 tunnel 或 docker exec
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+# -----------------------------------------------------------------------------
+# Named volumes
+#
+# 默认使用 named volume，便于 `docker compose config` 与无 root 环境直接跑通。
+# 企业部署更推荐 bind mount（Deployment 文档第 36-37 节），便于备份 / 监控 / NAS：
+#
+#   sudo mkdir -p /srv/casehub/{postgres,files,backups,logs,certs}
+#   sudo chown -R 1000:1000 /srv/casehub/files      # backend 容器 app 用户
+#   sudo chown -R 999:999   /srv/casehub/postgres   # postgres 镜像默认 uid 999
+#   sudo chmod 700 /srv/casehub/postgres
+#
+# 然后把上面两处 volumes 改成：
+#   - /srv/casehub/postgres:/var/lib/postgresql/data
+#   - /srv/casehub/files:/data/casehub
+#
+# 禁止 chmod -R 777（Deployment 文档第 38 节）。
+# -----------------------------------------------------------------------------
+volumes:
+  postgres-data:
+  file-storage:
