@@ -1,0 +1,16 @@
+# HTTP overlay profile (Phase 0-3 review HIGH-03, round 2).
+#
+# Use it ONLY when traffic is terminated over plain HTTP (no TLS) and the session
+# cookie therefore must NOT be Secure, e.g.:
+#
+#   SPRING_PROFILES_ACTIVE=prod,http
+#
+# It is a minimal overlay: it flips ONLY the session cookie to non-Secure and does
+# NOT touch the actuator configuration. The HTTPS production profile (prod) keeps
+# `secure: true` and the restricted actuator exposure (health,info / when_authorized).
+# Never combine this with the dev profile (which exposed all actuators).
+server:
+  servlet:
+    session:
+      cookie:
+        secure: false

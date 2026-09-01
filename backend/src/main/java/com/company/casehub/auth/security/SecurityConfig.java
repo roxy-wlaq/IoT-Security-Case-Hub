@@ -1,6 +1,8 @@
 package com.company.casehub.auth.security;
 
+import java.util.List;
 import lombok.RequiredArgsConstructor;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -12,6 +14,11 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.session.SessionRegistry;
 import org.springframework.security.core.session.SessionRegistryImpl;
 import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.web.authentication.session.ChangeSessionIdAuthenticationStrategy;
+import org.springframework.security.web.authentication.session.CompositeSessionAuthenticationStrategy;
+import org.springframework.security.web.authentication.session.RegisterSessionAuthenticationStrategy;
+import org.springframework.security.web.authentication.session.SessionAuthenticationStrategy;
+import org.springframework.security.web.session.HttpSessionEventPublisher;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
@@ -79,9 +86,50 @@ public class SecurityConfig {
         return new SessionRegistryImpl();
     }
 
+    /**
+     * Publishes {@code SessionCreatedEvent} / {@code SessionDestroyedEvent} for every
+     * HttpSession lifecycle change. {@link SessionRegistryImpl} listens for the destroy
+     * event, so it automatically drops {@link SessionInformation} on logout, session
+     * invalidation, timeout and server-side expiry — keeping the registry free of stale
+     * entries (Phase 0-3 review, MEDIUM, session lifecycle).
+     */
+    @Bean
+    public HttpSessionEventPublisher httpSessionEventPublisher() {
+        return new HttpSessionEventPublisher();
+    }
+
+    /**
+     * Session-authentication strategy applied by {@code AuthenticationService} after a
+     * successful login (round 2, session fixation + registry registration):
+     *   1. {@link ChangeSessionIdAuthenticationStrategy} mints a new session id on login,
+     *      neutralising session fixation (the pre-login anonymous id is invalidated).
+     *   2. {@link RegisterSessionAuthenticationStrategy} registers the new session with the
+     *      {@link SessionRegistry} so admin disable / password reset can expire it.
+     */
+    @Bean
+    public SessionAuthenticationStrategy sessionAuthenticationStrategy(SessionRegistry sessionRegistry) {
+        return new CompositeSessionAuthenticationStrategy(List.of(
+                new ChangeSessionIdAuthenticationStrategy(),
+                new RegisterSessionAuthenticationStrategy(sessionRegistry)));
+    }
+
     @Bean
     public SessionExpiryFilter sessionExpiryFilter(SessionRegistry sessionRegistry) {
-        return new SessionExpiryFilter(sessionRegistry);
+        return new SessionExpiryFilter(sessionRegistry, authenticationEntryPoint);
+    }
+
+    /**
+     * SessionExpiryFilter is wired into the Spring Security filter chain via
+     * {@code addFilterAfter(...)}. As a {@code Filter} bean it would otherwise also be
+     * auto-registered as a standalone servlet filter (running once more for every request
+     * outside the chain). Disabling the registration keeps it running ONLY inside the
+     * security chain at the intended position.
+     */
+    @Bean
+    public FilterRegistrationBean<SessionExpiryFilter> sessionExpiryFilterRegistration(SessionExpiryFilter sessionExpiryFilter) {
+        FilterRegistrationBean<SessionExpiryFilter> registration = new FilterRegistrationBean<>(sessionExpiryFilter);
+        registration.setEnabled(false);
+        return registration;
     }
 
     @Bean

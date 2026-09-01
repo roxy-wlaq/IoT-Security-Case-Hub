@@ -7,9 +7,11 @@ import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
 import java.io.IOException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.authentication.InsufficientAuthenticationException;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.session.SessionInformation;
 import org.springframework.security.core.session.SessionRegistry;
+import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 /**
@@ -22,11 +24,16 @@ import org.springframework.web.filter.OncePerRequestFilter;
  * invalidates the session and clears the {@code SecurityContext}, so the next request
  * is unauthenticated (401 / forced re-login) instead of the user silently staying
  * logged in.</p>
+ *
+ * <p>Rejections are emitted through the shared {@link AuthenticationEntryPoint} so the
+ * client receives the same unified JSON error body (code {@code AUTH_UNAUTHENTICATED},
+ * 401, traceId, details) as every other unauthenticated request.</p>
  */
 @RequiredArgsConstructor
 public class SessionExpiryFilter extends OncePerRequestFilter {
 
     private final SessionRegistry sessionRegistry;
+    private final AuthenticationEntryPoint authenticationEntryPoint;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
@@ -42,7 +49,8 @@ public class SessionExpiryFilter extends OncePerRequestFilter {
                     // Already invalidated by a concurrent request.
                 }
                 SecurityContextHolder.clearContext();
-                response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Session expired");
+                authenticationEntryPoint.commence(
+                        request, response, new InsufficientAuthenticationException("Session expired"));
                 return;
             }
         }

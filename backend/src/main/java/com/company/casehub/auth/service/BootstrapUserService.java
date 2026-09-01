@@ -18,7 +18,14 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * Creates the initial ADMIN user on first boot ONLY when an admin password is
  * supplied via {@code CASEHUB_BOOTSTRAP_ADMIN_PASSWORD}. No default password is
- * ever hardcoded (security requirement). The created user must change password.
+ * ever hardcoded (security requirement).
+ *
+ * <p>The bootstrap admin is created with {@code must_change_password = false}: the product
+ * does NOT require a password change on first use. The {@code must_change_password} column
+ * is retained as a DORMANT capability for a future "admin resets a user's password -> force
+ * that user to change the temporary password on next login" flow, which is NOT implemented
+ * in V1. Until that flow exists the field is never set to true and no forced-change gate is
+ * shown in the UI.</p>
  */
 @Slf4j
 @Component

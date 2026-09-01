@@ -1,12 +1,11 @@
 package com.company.casehub.integration;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import com.company.casehub.auth.service.SessionRegistryService;
 import com.company.casehub.user.entity.RoleEntity;
 import com.company.casehub.user.entity.UserEntity;
 import com.company.casehub.user.entity.UserRoleEntity;
@@ -22,16 +21,19 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockHttpSession;
+import org.springframework.security.core.session.SessionRegistry;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 
 /**
- * HIGH-01 regression: an expired session (admin disable / password reset via
- * {@link SessionRegistryService#expireSessions}) must be rejected on the next
- * request instead of silently staying authenticated.
+ * MEDIUM (round 2): SessionRegistry lifecycle. With {@code HttpSessionEventPublisher}
+ * registered, {@link SessionRegistry} must drop stale {@code SessionInformation} after
+ * logout / invalidation / expire, so disabled/expired users cannot keep a ghost session.
+ *
+ * <p>Runs against PostgreSQL Testcontainers (see {@link AbstractIntegrationTest}).</p>
  */
 @AutoConfigureMockMvc
-class SessionExpirationIT extends AbstractIntegrationTest {
+class SessionRegistryLifecycleIT extends AbstractIntegrationTest {
 
     @Autowired
     private MockMvc mockMvc;
@@ -40,7 +42,7 @@ class SessionExpirationIT extends AbstractIntegrationTest {
     private ObjectMapper objectMapper;
 
     @Autowired
-    private SessionRegistryService sessionRegistryService;
+    private SessionRegistry sessionRegistry;
 
     @Autowired
     private UserRepository userRepository;
@@ -55,20 +57,15 @@ class SessionExpirationIT extends AbstractIntegrationTest {
     private PasswordEncoder passwordEncoder;
 
     private MockHttpSession session;
-
     private String username;
-
-    private UUID userId;
-
     private static final String PASSWORD = "Password123!@#";
 
     @BeforeEach
     void setUp() {
         session = new MockHttpSession();
-        username = "expire_" + UUID.randomUUID().toString().substring(0, 8);
-        UserEntity user = new UserEntity(username, "Expire User", passwordEncoder.encode(PASSWORD));
+        username = "lifecycle_" + UUID.randomUUID().toString().substring(0, 8);
+        UserEntity user = new UserEntity(username, "Lifecycle User", passwordEncoder.encode(PASSWORD));
         userRepository.save(user);
-        userId = user.getId();
         RoleEntity admin = roleRepository.findByCode("ADMIN").orElseThrow();
         userRoleRepository.save(new UserRoleEntity(user, admin));
     }
@@ -83,23 +80,30 @@ class SessionExpirationIT extends AbstractIntegrationTest {
     }
 
     @Test
-    void expiredSessionIsRejectedOnNextRequest() throws Exception {
+    void sessionInfoRemovedAfterLogout() throws Exception {
         login();
+        String sessionId = session.getId();
+        assertThat(sessionRegistry.getSessionInformation(sessionId)).isNotNull();
 
-        // Administrator disables the user / resets password -> session marked expired.
-        sessionRegistryService.expireSessions(userId);
+        mockMvc.perform(post("/api/v1/auth/logout").session(session).with(csrf()))
+                .andExpect(status().isNoContent());
 
-        mockMvc.perform(get("/api/v1/auth/me").session(session))
-                .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.code").value("AUTH_UNAUTHENTICATED"));
+        // HttpSessionEventPublisher -> SessionRegistryImpl drops the invalidated session.
+        assertThat(sessionRegistry.getSessionInformation(sessionId)).isNull();
     }
 
     @Test
-    void validSessionStillWorksBeforeExpiry() throws Exception {
+    void sessionInfoRemovedAfterServerSideExpire() throws Exception {
         login();
+        String sessionId = session.getId();
+        assertThat(sessionRegistry.getSessionInformation(sessionId)).isNotNull();
 
+        // Admin disable / password reset marks the session expired; the next request
+        // (enforced by SessionExpiryFilter) removes the entry from the registry.
+        sessionRegistry.getSessionInformation(sessionId).expireNow();
         mockMvc.perform(get("/api/v1/auth/me").session(session))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.username").value(username));
+                .andExpect(status().isUnauthorized());
+
+        assertThat(sessionRegistry.getSessionInformation(sessionId)).isNull();
     }
 }

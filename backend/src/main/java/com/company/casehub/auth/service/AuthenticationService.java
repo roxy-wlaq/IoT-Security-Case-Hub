@@ -24,7 +24,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.core.session.SessionRegistry;
+import org.springframework.security.web.authentication.session.SessionAuthenticationStrategy;
 import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -48,7 +48,7 @@ public class AuthenticationService {
     private final CurrentUserService currentUserService;
     private final UserRepository userRepository;
     private final UserDetailsServiceImpl userDetailsService;
-    private final SessionRegistry sessionRegistry;
+    private final SessionAuthenticationStrategy sessionAuthenticationStrategy;
 
     public CurrentUserResponse login(LoginRequest request, HttpServletRequest httpRequest,
                                      HttpServletResponse httpResponse) {
@@ -77,9 +77,12 @@ public class AuthenticationService {
         SecurityContextHolder.setContext(context);
         securityContextRepository.saveContext(context, httpRequest, httpResponse);
 
-        // Explicitly register the session so SessionRegistryService.expireSessions works.
-        HttpSession session = httpRequest.getSession(true);
-        sessionRegistry.registerNewSession(session.getId(), principal);
+        // Apply Spring Security's session authentication strategy. This both mitigates
+        // session fixation (ChangeSessionIdAuthenticationStrategy changes the session id
+        // after authentication) and registers the new session with the SessionRegistry
+        // (RegisterSessionAuthenticationStrategy) so admin disable / password reset can
+        // expire it. Uses the framework mechanism instead of hand-rolled session management.
+        sessionAuthenticationStrategy.onAuthentication(authentication, httpRequest, httpResponse);
 
         log.info("Login success user={} ip={}", principal.getUsername(), ip);
         return toResponse(principal);

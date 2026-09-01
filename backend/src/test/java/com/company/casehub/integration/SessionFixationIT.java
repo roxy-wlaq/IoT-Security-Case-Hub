@@ -1,12 +1,11 @@
 package com.company.casehub.integration;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import com.company.casehub.auth.service.SessionRegistryService;
 import com.company.casehub.user.entity.RoleEntity;
 import com.company.casehub.user.entity.UserEntity;
 import com.company.casehub.user.entity.UserRoleEntity;
@@ -26,21 +25,20 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 
 /**
- * HIGH-01 regression: an expired session (admin disable / password reset via
- * {@link SessionRegistryService#expireSessions}) must be rejected on the next
- * request instead of silently staying authenticated.
+ * MEDIUM (round 2): Session fixation protection. A login performed against an existing
+ * anonymous session must produce a NEW session id (ChangeSessionIdAuthenticationStrategy)
+ * and the previous id must no longer carry an authenticated context.
+ *
+ * <p>Runs against PostgreSQL Testcontainers (see {@link AbstractIntegrationTest}).</p>
  */
 @AutoConfigureMockMvc
-class SessionExpirationIT extends AbstractIntegrationTest {
+class SessionFixationIT extends AbstractIntegrationTest {
 
     @Autowired
     private MockMvc mockMvc;
 
     @Autowired
     private ObjectMapper objectMapper;
-
-    @Autowired
-    private SessionRegistryService sessionRegistryService;
 
     @Autowired
     private UserRepository userRepository;
@@ -54,52 +52,45 @@ class SessionExpirationIT extends AbstractIntegrationTest {
     @Autowired
     private PasswordEncoder passwordEncoder;
 
-    private MockHttpSession session;
-
+    private MockHttpSession anonSession;
     private String username;
-
-    private UUID userId;
-
     private static final String PASSWORD = "Password123!@#";
 
     @BeforeEach
     void setUp() {
-        session = new MockHttpSession();
-        username = "expire_" + UUID.randomUUID().toString().substring(0, 8);
-        UserEntity user = new UserEntity(username, "Expire User", passwordEncoder.encode(PASSWORD));
+        anonSession = new MockHttpSession();
+        username = "fixation_" + UUID.randomUUID().toString().substring(0, 8);
+        UserEntity user = new UserEntity(username, "Fixation User", passwordEncoder.encode(PASSWORD));
         userRepository.save(user);
-        userId = user.getId();
         RoleEntity admin = roleRepository.findByCode("ADMIN").orElseThrow();
         userRoleRepository.save(new UserRoleEntity(user, admin));
     }
 
-    private void login() throws Exception {
+    @Test
+    void loginChangesSessionIdAndInvalidatesPrevious() throws Exception {
+        // 1. Establish an anonymous session (fetching the CSRF token creates/saves one).
+        mockMvc.perform(get("/api/v1/auth/csrf").session(anonSession)).andExpect(status().isOk());
+        String oldSessionId = anonSession.getId();
+
+        // 2. Login using that same session.
         mockMvc.perform(post("/api/v1/auth/login")
-                        .session(session)
+                        .session(anonSession)
                         .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of("username", username, "password", PASSWORD))))
                 .andExpect(status().isOk());
-    }
 
-    @Test
-    void expiredSessionIsRejectedOnNextRequest() throws Exception {
-        login();
+        // 3. The session id must differ after login (fixation protection).
+        String newSessionId = anonSession.getId();
+        assertThat(newSessionId).isNotEqualTo(oldSessionId);
 
-        // Administrator disables the user / resets password -> session marked expired.
-        sessionRegistryService.expireSessions(userId);
+        // 4. The new session can access a protected resource.
+        mockMvc.perform(get("/api/v1/auth/me").session(anonSession))
+                .andExpect(status().isOk());
 
-        mockMvc.perform(get("/api/v1/auth/me").session(session))
-                .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.code").value("AUTH_UNAUTHENTICATED"));
-    }
-
-    @Test
-    void validSessionStillWorksBeforeExpiry() throws Exception {
-        login();
-
-        mockMvc.perform(get("/api/v1/auth/me").session(session))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.username").value(username));
+        // 5. The old session id no longer carries an authenticated context.
+        MockHttpSession oldSession = new MockHttpSession(null, oldSessionId);
+        mockMvc.perform(get("/api/v1/auth/me").session(oldSession))
+                .andExpect(status().isUnauthorized());
     }
 }

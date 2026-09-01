@@ -30,17 +30,20 @@ public class LoginAttemptService {
     }
 
     public boolean isBlocked(String key) {
-        // Atomically read-and-reset: a live block is kept, an expired window is removed.
-        Attempt a = attempts.compute(key, (k, v) -> {
-            if (v == null) {
-                return null;
+        // Do NOT delete an entry that has not reached the lock threshold: the real
+        // login flow calls isBlocked() before every attempt, so removing the entry
+        // here would reset the failure counter on each call and the lock could never
+        // be reached. Only a block window that has already expired is cleared.
+        Attempt a = attempts.computeIfPresent(key, (k, v) -> {
+            if (v.blockedUntil() == null) {
+                return v; // not yet blocked -> keep the count alive
             }
-            if (v.blockedUntil() != null && Instant.now().isBefore(v.blockedUntil())) {
-                return v;
+            if (Instant.now().isBefore(v.blockedUntil())) {
+                return v; // still inside the block window -> keep
             }
-            return null;
+            return null; // block window expired -> remove
         });
-        return a != null;
+        return a != null && a.blockedUntil() != null;
     }
 
     public void recordFailure(String key) {
