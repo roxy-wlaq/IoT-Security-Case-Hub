@@ -1,0 +1,13 @@
+# Test profile for integration tests (*IT.java) running against PostgreSQL Testcontainers.
+# Datasource url / credentials are injected at runtime via DynamicPropertySource,
+# so they are intentionally NOT set here.
+
+casehub:
+  bootstrap:
+    admin-password: ""
+
+spring:
+  jpa:
+    show-sql: false
+  flyway:
+    enabled: true

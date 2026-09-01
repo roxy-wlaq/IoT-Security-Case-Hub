@@ -1,0 +1,53 @@
+spring:
+  application:
+    name: casehub-backend
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:dev}
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+  mvc:
+    throw-exception-if-no-handler-found: true
+  web:
+    resources:
+      add-mappings: false
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:casehub}
+    username: ${DB_USER:casehub}
+    password: ${DB_PASSWORD:casehub}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: none
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+        format_sql: false
+  flyway:
+    enabled: true
+    schemas: casehub
+    default-schema: casehub
+    locations: classpath:db/migration
+    baseline-on-migrate: false
+
+casehub:
+  bootstrap:
+    admin-username: ${CASEHUB_BOOTSTRAP_ADMIN_USERNAME:admin}
+    admin-display-name: ${CASEHUB_BOOTSTRAP_ADMIN_DISPLAY_NAME:System Administrator}
+    admin-password: ${CASEHUB_BOOTSTRAP_ADMIN_PASSWORD:}
+  storage:
+    root: ${CASEHUB_STORAGE_ROOT:/data/casehub}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: when_authorized
+
+server:
+  port: 8080
+  shutdown: graceful
