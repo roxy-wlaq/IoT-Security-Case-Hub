@@ -1,4 +1,5 @@
 # IoT 网络安全测试用例生成与任务分发平台
+
 ## 系统功能与权限设计 V0.1
 
 > 当前阶段目标：先确定系统功能、角色权限、公共测试用例库与用例维护流程；暂不进入代码实现。
@@ -612,11 +613,11 @@ BLE Pairing = YES
 
 示例：
 
-| ID | 测试项 | 分类 | 状态 | 结果 |
-|---|---|---|---|---|
+| ID      | 测试项      | 分类      | 状态   | 结果 |
+| ------- | ----------- | --------- | ------ | ---- |
 | BLE-001 | BLE设备发现 | Bluetooth | 已完成 | PASS |
-| BLE-002 | 未授权连接 | Bluetooth | 进行中 | - |
-| BLE-003 | BLE配对 | Bluetooth | 未开始 | - |
+| BLE-002 | 未授权连接  | Bluetooth | 进行中 | -    |
+| BLE-003 | BLE配对     | Bluetooth | 未开始 | -    |
 
 ---
 
@@ -663,18 +664,23 @@ INCONCLUSIVE
 含义：
 
 ### PASS
+
 满足预期安全要求。
 
 ### FAIL
+
 存在测试失败或安全问题。
 
 ### N/A
+
 当前设备不适用该测试。
 
 ### BLOCKED
+
 由于环境、资料、设备状态等原因无法执行。
 
 ### INCONCLUSIVE
+
 已经执行，但证据不足以得出确定结论。
 
 ---
@@ -1279,49 +1285,49 @@ Change Reason
 
 系统自动形成：
 
-| Version | 日期 | 修改人 | 类型 | 修改说明 |
-|---|---|---|---|---|
-| 2.0 | 2026-09-01 | 张三 | Major | 修改配对验证逻辑 |
-| 1.3 | 2026-07-14 | 李四 | Minor | 更新命令 |
-| 1.2 | 2026-05-22 | 王五 | Minor | 增加证据要求 |
+| Version | 日期       | 修改人 | 类型  | 修改说明         |
+| ------- | ---------- | ------ | ----- | ---------------- |
+| 2.0     | 2026-09-01 | 张三   | Major | 修改配对验证逻辑 |
+| 1.3     | 2026-07-14 | 李四   | Minor | 更新命令         |
+| 1.2     | 2026-05-22 | 王五   | Minor | 增加证据要求     |
 
 ---
 
 # 31. 角色权限矩阵
 
-| 功能 | 管理员 | 测试协调员 | 测试人员 |
-|---|:---:|:---:|:---:|
-| 查看全部公共测试用例 | ✓ | ✓ | ✓ |
-| 搜索测试用例 | ✓ | ✓ | ✓ |
-| 查看详细步骤 | ✓ | ✓ | ✓ |
-| 查看历史版本 | ✓ | ✓ | ✓ |
-| 查看修改记录 | ✓ | ✓ | ✓ |
-| 查看 Deprecated 用例 | ✓ | ✓ | ✓ |
-| 收藏测试用例 | ✓ | ✓ | ✓ |
-| 创建项目 | ✓ | ✓ | × |
-| 修改项目基本信息 | ✓ | ✓ | × |
-| 填写设备能力 | ✓ | ✓ | × |
-| 自动生成项目测试用例 | ✓ | ✓ | × |
-| 手动增加项目用例 | ✓ | ✓ | × |
-| 删除项目用例 | ✓ | ✓ | × |
-| 分配测试人员 | ✓ | ✓ | × |
-| 执行测试 | ✓ | ✓ | ✓ |
-| 提交测试结果 | ✓ | ✓ | ✓ |
-| 上传证据 | ✓ | ✓ | ✓ |
-| 审核项目测试结果 | ✓ | ✓ | × |
-| 提交公共用例修改建议 | ✓ | ✓ | ✓ |
-| 提交新增用例建议 | ✓ | ✓ | ✓ |
-| 创建公共用例草稿 | ✓ | ✓ | × |
-| 创建公共用例 Revision | ✓ | ✓ | × |
-| 编辑 Draft | ✓ | 授权范围 | × |
-| 提交版本审核 | ✓ | ✓ | × |
-| 审核公共测试用例 | ✓ | × | × |
-| 发布公共测试用例 | ✓ | × | × |
-| Deprecated / Archived | ✓ | × | × |
-| Emergency Disable | ✓ | × | × |
-| 修改自动生成规则 | ✓ | × | × |
-| 用户与权限管理 | ✓ | × | × |
-| 查看完整系统审计日志 | ✓ | × | × |
+| 功能                  | 管理员 | 测试协调员 | 测试人员 |
+| --------------------- | :----: | :--------: | :------: |
+| 查看全部公共测试用例  |   ✓    |     ✓      |    ✓     |
+| 搜索测试用例          |   ✓    |     ✓      |    ✓     |
+| 查看详细步骤          |   ✓    |     ✓      |    ✓     |
+| 查看历史版本          |   ✓    |     ✓      |    ✓     |
+| 查看修改记录          |   ✓    |     ✓      |    ✓     |
+| 查看 Deprecated 用例  |   ✓    |     ✓      |    ✓     |
+| 收藏测试用例          |   ✓    |     ✓      |    ✓     |
+| 创建项目              |   ✓    |     ✓      |    ×     |
+| 修改项目基本信息      |   ✓    |     ✓      |    ×     |
+| 填写设备能力          |   ✓    |     ✓      |    ×     |
+| 自动生成项目测试用例  |   ✓    |     ✓      |    ×     |
+| 手动增加项目用例      |   ✓    |     ✓      |    ×     |
+| 删除项目用例          |   ✓    |     ✓      |    ×     |
+| 分配测试人员          |   ✓    |     ✓      |    ×     |
+| 执行测试              |   ✓    |     ✓      |    ✓     |
+| 提交测试结果          |   ✓    |     ✓      |    ✓     |
+| 上传证据              |   ✓    |     ✓      |    ✓     |
+| 审核项目测试结果      |   ✓    |     ✓      |    ×     |
+| 提交公共用例修改建议  |   ✓    |     ✓      |    ✓     |
+| 提交新增用例建议      |   ✓    |     ✓      |    ✓     |
+| 创建公共用例草稿      |   ✓    |     ✓      |    ×     |
+| 创建公共用例 Revision |   ✓    |     ✓      |    ×     |
+| 编辑 Draft            |   ✓    |  授权范围  |    ×     |
+| 提交版本审核          |   ✓    |     ✓      |    ×     |
+| 审核公共测试用例      |   ✓    |     ×      |    ×     |
+| 发布公共测试用例      |   ✓    |     ×      |    ×     |
+| Deprecated / Archived |   ✓    |     ×      |    ×     |
+| Emergency Disable     |   ✓    |     ×      |    ×     |
+| 修改自动生成规则      |   ✓    |     ×      |    ×     |
+| 用户与权限管理        |   ✓    |     ×      |    ×     |
+| 查看完整系统审计日志  |   ✓    |     ×      |    ×     |
 
 ---
 
@@ -1472,3 +1478,726 @@ N/A 条件
 10. **自动生成的测试用例必须说明推荐原因。**
 11. **所有关键修改必须可追溯。**
 12. **系统第一阶段聚焦测试用例，不扩展到正式报告系统。**
+
+
+---
+
+# 36. 适用接口、通信类型与协议层级
+
+为了避免设备初始信息不足时无法正确生成测试用例，系统不应仅使用：
+
+```text
+适用接口
+适用协议
+```
+
+而应拆分为以下层级：
+
+```text
+适用接口
+Applicable Interface
+
+适用通信类型 / 技术
+Applicable Communication Technology
+
+适用协议 / Profile
+Applicable Protocol / Profile
+
+适用功能
+Applicable Function
+
+适用安全机制
+Applicable Security Mechanism
+```
+
+---
+
+## 36.1 适用接口
+
+“适用接口”表示设备暴露出来的攻击面或通信接口大类。
+
+例如：
+
+```text
+Bluetooth
+Wi-Fi
+Ethernet
+USB
+UART
+SWD
+JTAG
+NFC
+Zigbee
+Cellular
+```
+
+以蓝牙设备为例：
+
+```text
+Applicable Interface:
+Bluetooth
+```
+
+此时不要求项目创建者已经知道具体是 BLE 还是 BR/EDR。
+
+---
+
+## 36.2 适用通信类型 / 技术
+
+用于描述同一接口下的具体通信技术或工作模式。
+
+以 Bluetooth 为例：
+
+```text
+Bluetooth
+├─ BLE
+├─ BR/EDR
+└─ Dual Mode
+```
+
+因此：
+
+```text
+Bluetooth
+```
+
+属于接口大类；
+
+```text
+BLE
+BR/EDR
+```
+
+属于通信类型 / 技术，而不建议简单归入“协议”。
+
+---
+
+## 36.3 适用协议 / Profile
+
+在具体通信技术下面继续描述协议或 Profile。
+
+Bluetooth 示例：
+
+```text
+Bluetooth
+│
+├─ BLE
+│  ├─ ATT
+│  ├─ GATT
+│  ├─ SMP
+│  └─ L2CAP
+│
+└─ BR/EDR
+   ├─ RFCOMM
+   ├─ A2DP
+   ├─ AVRCP
+   ├─ SPP
+   └─ L2CAP
+```
+
+测试用例可以按不同粒度设置适用范围。
+
+例如：
+
+```text
+BLE-GATT-001
+
+Interface:
+Bluetooth
+
+Communication Technology:
+BLE
+
+Protocol / Profile:
+GATT
+```
+
+---
+
+# 37. 设备初始信息不足时的处理原则
+
+IoT 项目开始测试前，经常只知道：
+
+```text
+Bluetooth = YES
+```
+
+但不知道：
+
+```text
+BLE?
+BR/EDR?
+Dual Mode?
+GATT?
+A2DP?
+Pairing?
+Bonding?
+```
+
+系统不能要求测试协调员在创建项目时必须提前知道这些信息。
+
+因此设备能力必须支持：
+
+```text
+YES
+NO
+UNKNOWN
+```
+
+其中：
+
+```text
+UNKNOWN
+```
+
+属于正常业务状态，而不是填写错误。
+
+---
+
+# 38. 渐进式测试生成（Progressive Test Generation）
+
+系统应支持“边测试、边识别、边补充测试项”的渐进式测试生成方式。
+
+核心流程：
+
+```text
+已知设备信息较少
+       ↓
+先生成基础识别类测试
+       ↓
+测试人员执行识别
+       ↓
+获得新的设备能力信息
+       ↓
+提交能力更新
+       ↓
+测试协调员确认
+       ↓
+重新运行生成规则
+       ↓
+生成更具体的专项测试用例
+```
+
+该机制命名为：
+
+**Progressive Test Generation**
+
+中文：
+
+**渐进式测试生成**
+
+---
+
+# 39. Bluetooth 渐进式生成示例
+
+项目初始信息：
+
+```text
+Bluetooth = YES
+BLE = UNKNOWN
+BR/EDR = UNKNOWN
+```
+
+系统第一阶段只生成基础识别类用例，例如：
+
+```text
+BT-INFO-001
+蓝牙接口基本信息识别
+
+BT-DISC-001
+蓝牙设备发现测试
+
+BT-MODE-001
+BLE / BR/EDR 通信模式识别
+
+BT-SVC-001
+Bluetooth Service / Profile 识别
+```
+
+此时暂不生成：
+
+```text
+BLE-GATT-FUZZ
+BLE-SMP
+BR/EDR-A2DP
+RFCOMM
+```
+
+等高度依赖具体通信类型的专项测试。
+
+---
+
+## 39.1 识别后更新能力
+
+测试人员执行测试后发现：
+
+```text
+Bluetooth = YES
+
+BLE = YES
+BR/EDR = YES
+
+BLE.GATT = YES
+BLE.Pairing = YES
+
+BR/EDR.A2DP = YES
+BR/EDR.AVRCP = YES
+```
+
+测试人员可提交：
+
+```text
+发现设备能力
+```
+
+例如：
+
+```text
+BLE = YES
+BR/EDR = YES
+GATT = YES
+A2DP = YES
+
+Evidence:
+btmon.log
+bluetoothctl.png
+```
+
+由于测试人员没有直接修改项目核心信息的权限，因此该更新进入：
+
+```text
+能力更新申请
+```
+
+由测试协调员确认。
+
+---
+
+## 39.2 重新生成专项测试
+
+测试协调员批准后，系统重新运行生成规则。
+
+系统提示：
+
+```text
+发现新的适用测试项
+```
+
+例如：
+
+```text
++ BLE-CONNECT-001
++ BLE-PAIR-001
++ BLE-BOND-001
++ BLE-GATT-001
++ BLE-GATT-AUTH-001
++ BLE-ENC-001
+
++ BREDR-PAIR-001
++ BREDR-ENC-001
++ BREDR-A2DP-001
+```
+
+测试协调员可以：
+
+```text
+全部加入测试计划
+
+选择加入
+
+忽略
+```
+
+系统不能未经人工确认直接覆盖当前项目测试计划。
+
+---
+
+# 40. 设备能力信息来源
+
+设备能力不应只记录“值”，还应记录信息来源。
+
+建议每个 Capability 至少支持：
+
+```text
+Value
+
+Source
+
+Evidence
+
+Comment
+
+Updated By
+
+Updated At
+```
+
+Value：
+
+```text
+YES
+NO
+UNKNOWN
+```
+
+Source 推荐：
+
+```text
+Customer Provided
+Tester Discovered
+Document
+Automatic Detection
+Coordinator Input
+Other
+```
+
+例如：
+
+```text
+BLE
+
+Value:
+YES
+
+Source:
+Tester Discovered
+
+Evidence:
+EV-BT-0003
+
+Updated By:
+Tester A
+```
+
+或者：
+
+```text
+OTA
+
+Value:
+YES
+
+Source:
+Customer Provided
+```
+
+这样后续可以区分：
+
+> 该能力是客户声明、测试发现、文档确认还是自动识别得到的。
+
+---
+
+# 41. Bluetooth 能力模型示例
+
+推荐将 Bluetooth 能力设计为树状结构：
+
+```text
+Bluetooth
+│
+├─ Present
+│  ├─ YES
+│  ├─ NO
+│  └─ UNKNOWN
+│
+├─ BLE
+│  ├─ Present
+│  ├─ Advertising
+│  ├─ Connection
+│  ├─ Pairing
+│  ├─ Bonding
+│  ├─ GATT
+│  └─ Encryption
+│
+└─ BR/EDR
+   ├─ Present
+   ├─ Discoverable
+   ├─ Pairing
+   ├─ SSP
+   ├─ A2DP
+   ├─ AVRCP
+   ├─ SPP
+   └─ Encryption
+```
+
+每个子能力均允许：
+
+```text
+YES
+NO
+UNKNOWN
+```
+
+---
+
+# 42. Test Case 适用条件允许不同粒度
+
+不同测试用例不应该要求相同精度的设备信息。
+
+## 42.1 粗粒度测试
+
+例如：
+
+```text
+BT-DISC-001
+Bluetooth Device Discovery
+```
+
+只要求：
+
+```text
+Bluetooth == YES
+```
+
+---
+
+## 42.2 中等粒度测试
+
+例如：
+
+```text
+BLE-PAIR-001
+BLE Pairing Test
+```
+
+要求：
+
+```text
+Bluetooth == YES
+
+AND
+
+BLE == YES
+
+AND
+
+Pairing != NO
+```
+
+---
+
+## 42.3 细粒度测试
+
+例如：
+
+```text
+BLE-GATT-WRITE-001
+GATT Writable Characteristic Access Test
+```
+
+要求：
+
+```text
+Bluetooth == YES
+
+AND
+
+BLE == YES
+
+AND
+
+GATT == YES
+
+AND
+
+WritableCharacteristic == YES
+```
+
+因此整个测试生成过程形成：
+
+```text
+粗粒度能力
+     ↓
+识别类测试
+     ↓
+获得细粒度能力
+     ↓
+专项测试
+```
+
+---
+
+# 43. 渐进式生成不只适用于 Bluetooth
+
+该机制应作为系统通用能力。
+
+## 43.1 Wi-Fi
+
+初始：
+
+```text
+Wi-Fi = YES
+
+STA = UNKNOWN
+AP = UNKNOWN
+Hotspot = UNKNOWN
+WPA2 = UNKNOWN
+WPA3 = UNKNOWN
+```
+
+先生成：
+
+```text
+WIFI-DISC-001
+Wi-Fi 工作模式识别
+```
+
+识别后：
+
+```text
+STA = YES
+AP = YES
+```
+
+再生成 STA / AP 专项测试。
+
+---
+
+## 43.2 UART
+
+初始：
+
+```text
+UART = YES
+
+Purpose = UNKNOWN
+Baudrate = UNKNOWN
+Authentication = UNKNOWN
+```
+
+先生成：
+
+```text
+UART-ENUM-001
+UART 接口识别与参数探测
+```
+
+识别后再生成：
+
+```text
+UART-ACCESS-001
+UART-INFO-001
+UART-CMD-001
+```
+
+---
+
+## 43.3 软件更新
+
+初始：
+
+```text
+Software Update = YES
+
+Update Method = UNKNOWN
+Protection Method = UNKNOWN
+```
+
+先生成：
+
+```text
+SUM-DISC-001
+软件更新机制识别
+```
+
+识别：
+
+```text
+OTA = YES
+Secure Channel = YES
+Signature = NO
+```
+
+再生成对应安全通信和更新安全测试。
+
+---
+
+# 44. 能力更新申请
+
+由于测试人员只能执行和提交申请，不能直接修改项目核心能力，因此应增加：
+
+```text
+Capability Update Request
+能力更新申请
+```
+
+测试人员可提交：
+
+```text
+目标能力
+当前值
+建议新值
+发现说明
+证据
+关联测试任务
+```
+
+状态：
+
+```text
+Pending
+Approved
+Rejected
+```
+
+测试协调员审核通过后：
+
+```text
+更新设备能力
+      ↓
+重新运行生成规则
+      ↓
+显示测试计划差异
+```
+
+---
+
+# 45. 设备能力变化后的测试计划差异
+
+重新生成规则后，不应自动修改项目测试计划。
+
+应展示：
+
+```text
+New Recommended Cases
+新增建议测试
+
+No Longer Applicable
+可能不再适用
+
+Unchanged
+无变化
+```
+
+例如：
+
+```text
+New Recommended Cases:
+
++ BLE-GATT-001
++ BLE-ENC-001
++ BREDR-A2DP-001
+```
+
+由测试协调员决定是否加入。
+
+这样保持：
+
+```text
+系统负责推荐
+测试协调员负责最终决定
+```
+
+---
+
+# 46. 本次设计调整后的关键原则
+
+新增以下系统设计原则：
+
+13. **设备初始信息不完整属于正常情况，UNKNOWN 必须是一等状态。**
+14. **接口、通信技术、协议 / Profile 必须分层建模。**
+15. **BLE 与 BR/EDR 属于 Bluetooth 下的通信技术 / 模式，不简单作为“协议”处理。**
+16. **系统必须支持渐进式测试生成。**
+17. **未知能力优先触发识别类测试，而不是强制项目创建者提前判断。**
+18. **测试执行过程中发现的新能力，应通过能力更新申请进入项目。**
+19. **能力更新后重新运行规则，但不得自动覆盖测试计划。**
+20. **每个设备能力应记录信息来源和证据，以便追溯。**
