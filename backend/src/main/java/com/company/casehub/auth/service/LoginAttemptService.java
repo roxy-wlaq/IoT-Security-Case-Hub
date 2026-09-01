@@ -30,28 +30,28 @@ public class LoginAttemptService {
     }
 
     public boolean isBlocked(String key) {
-        Attempt a = attempts.get(key);
-        if (a == null) {
-            return false;
-        }
-        if (a.blockedUntil() != null && Instant.now().isBefore(a.blockedUntil())) {
-            return true;
-        }
-        // Window expired: reset.
-        if (a.blockedUntil() != null) {
-            attempts.remove(key);
-        }
-        return false;
+        // Atomically read-and-reset: a live block is kept, an expired window is removed.
+        Attempt a = attempts.compute(key, (k, v) -> {
+            if (v == null) {
+                return null;
+            }
+            if (v.blockedUntil() != null && Instant.now().isBefore(v.blockedUntil())) {
+                return v;
+            }
+            return null;
+        });
+        return a != null;
     }
 
     public void recordFailure(String key) {
-        Attempt current = attempts.getOrDefault(key, new Attempt(0, null));
-        int next = current.count() + 1;
-        if (next >= MAX_ATTEMPTS) {
-            attempts.put(key, new Attempt(next, Instant.now().plus(BLOCK_DURATION)));
-        } else {
-            attempts.put(key, new Attempt(next, null));
-        }
+        // Atomic read-modify-write so concurrent failures cannot lose a count.
+        attempts.compute(key, (k, v) -> {
+            int next = (v == null ? 0 : v.count()) + 1;
+            if (next >= MAX_ATTEMPTS) {
+                return new Attempt(next, Instant.now().plus(BLOCK_DURATION));
+            }
+            return new Attempt(next, null);
+        });
     }
 
     public void recordSuccess(String key) {

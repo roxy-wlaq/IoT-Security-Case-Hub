@@ -4,6 +4,17 @@ spring:
   flyway:
     enabled: true
 
+# Dev / local / HTTP profile: the session cookie must NOT be Secure so it works over
+# plain HTTP (Phase 0-3 review HIGH-03). The production (HTTPS) profile lives in
+# application-prod.yml and sets secure: true.
+server:
+  servlet:
+    session:
+      cookie:
+        http-only: true
+        secure: false
+        same-site: lax
+
 management:
   endpoints:
     web:

@@ -174,9 +174,9 @@ export function userHasRole(user: { roles?: string[] } | null | undefined, role:
   if (!user) {
     return false;
   }
-  if (isAdmin(user)) {
-    return true;
-  }
+  // A role must be a real, assigned role. ADMIN is granted every *permission*
+  // (see hasPermission) but it does NOT automatically satisfy an arbitrary
+  // *role* requirement (Phase 0-3 review, MEDIUM-03).
   return Boolean(user.roles?.includes(role));
 }
 

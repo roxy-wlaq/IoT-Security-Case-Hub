@@ -56,9 +56,9 @@ public class BootstrapUserService implements ApplicationRunner {
 
         UserEntity admin = new UserEntity(adminUsername, adminDisplayName,
                 passwordEncoder.encode(adminPassword));
-        admin.setMustChangePassword(true);
+        admin.setMustChangePassword(false);
         userRepository.save(admin);
         userRoleRepository.save(new UserRoleEntity(admin, adminRole));
-        log.info("Initial ADMIN user '{}' created (must_change_password=true).", adminUsername);
+        log.info("Initial ADMIN user '{}' created (must_change_password=false).", adminUsername);
     }
 }

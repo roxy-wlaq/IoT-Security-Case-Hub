@@ -24,7 +24,7 @@ class SecurityConfigTest {
     @Test
     void securityConfigWiresFrozenXxsrfHeader() {
         // The @Bean method does not depend on the injected collaborators, so nulls are safe here.
-        SecurityConfig config = new SecurityConfig(null, null, null);
+        SecurityConfig config = new SecurityConfig(null, null);
         CsrfTokenRepository repository = config.csrfTokenRepository();
 
         assertThat(repository).isInstanceOf(CookieCsrfTokenRepository.class);

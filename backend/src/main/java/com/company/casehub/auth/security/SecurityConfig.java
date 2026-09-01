@@ -1,6 +1,5 @@
 package com.company.casehub.auth.security;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -17,6 +16,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.access.intercept.AuthorizationFilter;
+import org.springframework.security.web.context.SecurityContextHolderFilter;
 import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.csrf.CsrfTokenRepository;
@@ -27,7 +27,8 @@ import org.springframework.security.web.csrf.CsrfTokenRepository;
  *  - CSRF enabled with a non-HttpOnly XSRF-TOKEN cookie (front-end reads it for the
  *    X-XSRF-TOKEN header). CSRF is never disabled.
  *  - Stateless JSON 401/403 responses (no login-page redirect).
- *  - Force-password-change filter after authorization.
+ *  - Session-expiry enforcement via SessionExpiryFilter (HIGH-01): an expired
+ *    session (admin disable / password reset) is invalidated on the next request.
  */
 @Configuration
 @EnableWebSecurity
@@ -36,10 +37,9 @@ public class SecurityConfig {
 
     private final RestAuthenticationEntryPoint authenticationEntryPoint;
     private final RestAccessDeniedHandler accessDeniedHandler;
-    private final ObjectMapper objectMapper;
 
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+    public SecurityFilterChain securityFilterChain(HttpSecurity http, SessionRegistry sessionRegistry) throws Exception {
         http
                 .csrf(csrf -> csrf.csrfTokenRepository(csrfTokenRepository()))
                 .authorizeHttpRequests(auth -> auth
@@ -55,7 +55,7 @@ public class SecurityConfig {
                         .accessDeniedHandler(accessDeniedHandler))
                 .formLogin(AbstractHttpConfigurer::disable)
                 .httpBasic(AbstractHttpConfigurer::disable)
-                .addFilterAfter(new MustChangePasswordFilter(objectMapper), AuthorizationFilter.class);
+                .addFilterAfter(sessionExpiryFilter(sessionRegistry), SecurityContextHolderFilter.class);
         return http.build();
     }
 
@@ -77,6 +77,11 @@ public class SecurityConfig {
     @Bean
     public SessionRegistry sessionRegistry() {
         return new SessionRegistryImpl();
+    }
+
+    @Bean
+    public SessionExpiryFilter sessionExpiryFilter(SessionRegistry sessionRegistry) {
+        return new SessionExpiryFilter(sessionRegistry);
     }
 
     @Bean
