@@ -66,13 +66,19 @@ services:
     env_file:
       - .env
     environment:
-      # Default to the production profile (secure cookie + restricted actuators).
-      # When terminating traffic over plain HTTP with no TLS, append the http overlay
-      # profile so the session cookie is non-Secure (see application-http.yml):
-      #   SPRING_PROFILES_ACTIVE=prod,http
-      # HTTPS deployments keep prod as-is (secure=true). The dev profile is NOT a
+      # Default deployment profile = HTTP overlay (prod,http):
+      #   - prod : secure cookie (secure=true), restricted actuators, NO JWT.
+      #   - http : minimal overlay that ONLY flips the session cookie to non-Secure
+      #            because traffic is terminated over plain HTTP (no TLS). See
+      #            application-http.yml. It does NOT touch actuator / security / CSRF.
+      # This is the safe default for `docker compose up --build -d` on plain HTTP
+      # (nginx listens on :80 by default), so the JSESSIONID cookie is NOT marked
+      # Secure while still being served over HTTP (HIGH-03, phase 0-3 review R3).
+      # For HTTPS deployments (TLS terminated at nginx) override to:
+      #   SPRING_PROFILES_ACTIVE=prod
+      # which keeps the session cookie Secure (secure=true). The dev profile is NOT a
       # supported deployment default (it exposed all actuators).
-      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod,http}
       # 数据源
       DB_HOST: postgres
       DB_PORT: 5432

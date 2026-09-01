@@ -135,6 +135,14 @@ chmod 600 .env
 - `POSTGRES_PASSWORD` / `DB_PASSWORD`：强随机密码，两者一致
 - `CASEHUB_BOOTSTRAP_ADMIN_PASSWORD`：初始管理员密码
 
+`SPRING_PROFILES_ACTIVE`（会话 Cookie 安全 / HTTP·HTTPS 部署）：
+
+- 默认 `prod,http` → 纯 HTTP 部署，会话 Cookie 设为 non-Secure（无 TLS 必须）
+- HTTPS 部署（nginx 终止 TLS）改为 `prod` → 会话 Cookie 保持 Secure(secure=true)
+- `http` profile 仅覆盖 `server.servlet.session.cookie.secure=false`，不改动
+  Actuator / Security / CSRF 配置（见 `backend/src/main/resources/application-{prod,http}.yml`）
+- `dev` profile **不是**受支持的部署默认值（它会暴露全部 Actuator）
+
 `CASEHUB_BOOTSTRAP_ADMIN_PASSWORD` 行为（`Deployment-Backup` 第 45-47 节）：
 
 - 仅当系统中**不存在任何 ADMIN 用户**时创建初始管理员
@@ -279,6 +287,12 @@ docker run --rm -v casehub_file-storage:/data -v /srv/casehub/backups:/out \
 ## 10. HTTPS
 
 V1 内网初期允许先跑 HTTP，生产正式推荐 HTTPS（`Deployment-Backup` 第 10-11 节）。
+
+> 切换到 HTTPS 时，必须把 `.env` 中的 `SPRING_PROFILES_ACTIVE` 改为 `prod`
+> （而非默认的 `prod,http`），否则会话 Cookie 仍是非 Secure，明文 Cookie 会随
+> HTTP 泄露。`http` profile 仅用于无 TLS 的纯 HTTP 场景；`prod` 才会让
+> `server.servlet.session.cookie.secure=true`。详见
+> `backend/src/main/resources/application-{prod,http}.yml`。
 
 启用步骤已在 `deploy/nginx/conf.d/casehub.conf` 的注释中给出，摘要：
 

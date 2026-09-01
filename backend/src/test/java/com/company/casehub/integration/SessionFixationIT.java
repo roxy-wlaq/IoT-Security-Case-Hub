@@ -21,6 +21,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockHttpSession;
+import org.springframework.security.core.session.SessionRegistry;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -51,6 +52,9 @@ class SessionFixationIT extends AbstractIntegrationTest {
 
     @Autowired
     private PasswordEncoder passwordEncoder;
+
+    @Autowired
+    private SessionRegistry sessionRegistry;
 
     private MockHttpSession anonSession;
     private String username;
@@ -84,13 +88,17 @@ class SessionFixationIT extends AbstractIntegrationTest {
         String newSessionId = anonSession.getId();
         assertThat(newSessionId).isNotEqualTo(oldSessionId);
 
-        // 4. The new session can access a protected resource.
+        // 4. The new (post-login) session can access a protected resource.
         mockMvc.perform(get("/api/v1/auth/me").session(anonSession))
                 .andExpect(status().isOk());
 
-        // 5. The old session id no longer carries an authenticated context.
-        MockHttpSession oldSession = new MockHttpSession(null, oldSessionId);
-        mockMvc.perform(get("/api/v1/auth/me").session(oldSession))
-                .andExpect(status().isUnauthorized());
+        // 5. The SessionRegistry must hold the NEW session id (registered by
+        //    RegisterSessionAuthenticationStrategy after the id was changed)...
+        assertThat(sessionRegistry.getSessionInformation(newSessionId)).isNotNull();
+        // ...and must NOT hold the OLD (pre-login) session id — it was invalidated by
+        // ChangeSessionIdAuthenticationStrategy and never re-registered. This proves the
+        // authenticated/registered session is the post-login id, and any pre-login id is
+        // dead (stronger than recreating an empty session and asserting 401).
+        assertThat(sessionRegistry.getSessionInformation(oldSessionId)).isNull();
     }
 }

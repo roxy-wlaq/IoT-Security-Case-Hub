@@ -12,6 +12,7 @@
 - 实现状态：`Implementation Complete / Static + Partial Runtime Verification`
 - **Round 1（2026-09-02 早）：** 修复 **8 项** Phase 0–3 Code Review 发现（HIGH-01/02/03、MEDIUM-01/02/03/04、LOW-01），每 HIGH 增加 Regression Test，并补齐前端基础测试（MEDIUM-01）。（注：此前内部记录曾误写为"9 项"，实际表格为 8 项，本轮已校正。）
 - **Round 2（2026-09-02 晚）：** 修复 **8 项** Review Round 2 发现（见下方独立章节）—— LoginAttempt 回归、HTTP overlay profile、SessionExpiry 双重注册/统一错误、SessionRegistry 生命周期、Session Fixation、文档与 must_change_password 语义。
+- **Round 3（2026-09-02 凌晨）：** 最后小范围修复 **3 项**（HIGH×1、MEDIUM×1、LOW×1）—— 默认 Docker HTTP 与 Secure Cookie 冲突（HIGH-03 真正闭环）、登录后 SessionAuthenticationStrategy 顺序、加强 SessionFixationIT。不开发 Phase 4。
 - 技术栈保持冻结（Java 21 / Spring Boot 3 / Spring Security / Server-side Session / CSRF / PostgreSQL 16 / Flyway / React+TS / TanStack Query / Ant Design / Nginx / Docker Compose）。未引入 JWT，未关闭 CSRF，未重新设计架构。
 
 ---
@@ -145,19 +146,42 @@
 
 ---
 
+## Phase 0–3 Code Review Findings — Round 3 (2026-09-02 凌晨)
+
+> 基线：`dev/v1-implementation` @ `84196d4`。范围：仅做最后小范围修复，不开发 Phase 4。
+> 提交：`fix: resolve phase 0-3 review findings round 3`（独立 commit，同分支 `dev/v1-implementation`）。
+
+| 优先级 | 编号 | 问题 | 根因修复 | 关键文件 |
+|--------|------|------|----------|----------|
+| HIGH | 1 | 默认 Docker HTTP 与 Secure Cookie 仍冲突：prod profile `cookie.secure=true`，而 Nginx 默认只监听 HTTP 80，直接 `docker compose up --build -d` 得到 HTTP + Secure JSESSIONID，HIGH-03 实际未闭环 | docker-compose 默认 `SPRING_PROFILES_ACTIVE=prod,http`（`http` overlay **仅**覆盖 `cookie.secure=false`，不改 Actuator / Security / CSRF）；HTTPS 部署改 `SPRING_PROFILES_ACTIVE=prod` 恢复 `secure=true`。`application-http.yml` 设计正确，**保留**。` .env.example` 与部署注释（README §5 / §10）同步说明 HTTP / HTTPS 两种 profile 用法。 | `deploy/docker-compose.yml`、`deploy/.env.example`、`deploy/README.md` |
+| MEDIUM | 2 | 登录后 SessionAuthenticationStrategy 顺序不当：先持久化已认证 SecurityContext，再跑 strategy；若 strategy 抛 `SessionAuthenticationException`，会留下未经验证的已认证 context | 调整 `AuthenticationService.login()`：先 `sessionAuthenticationStrategy.onAuthentication(...)`，再创建并 `saveContext` 已认证 SecurityContext。保持 `ChangeSessionId` + `RegisterSession` 不变。 | `auth/service/AuthenticationService.java` |
+| LOW | 3 | SessionFixationIT 用"重建空 MockSession → 401"作为旧 Session 失效证据，证明力有限（空 Session 本就无认证） | 重写断言：① 登录前后 session id 不同；② 新 session `/api/v1/auth/me` = 200；③ `SessionRegistry` 含新 session id；④ `SessionRegistry` 不含旧 session id。不再以空 MockSession 401 为主证据。 | `integration/SessionFixationIT.java` |
+
+### Round 3 修改/加强测试
+
+| 测试文件 | 覆盖 |
+|----------|------|
+| `backend/.../integration/SessionFixationIT.java`（改） | 登录前后 session id 不同；新 session /me = 200；SessionRegistry 含新 id、不含旧 id（移除弱 401 断言） |
+| `backend/.../integration/SessionExpirationIT.java` / `SessionRegistryLifecycleIT.java` | 维持 Round 2 实现（本轮未改） |
+
+> **单元测试（`*Test`，`mvn test`，无需 DB）已执行并通过**（见 Verification Summary）。
+> **集成测试（`*IT`，`mvn verify`，Testcontainers PG16）本轮尝试执行但因 Testcontainers 网络不可达而失败，如实标记为 Pending，不标 PASS**（见注 4）。
+
+---
+
 ## Verification Summary
 
 | 验证项 | 命令 | 结果 |
 |--------|------|------|
 | Backend 编译 | `mvn clean compile` | ✅ BUILD SUCCESS |
 | Backend Unit Test | `mvn test`（surefire，*Test） | ✅ Round 2 新增 `LoginAttemptServiceTest`（改）、`SessionExpiryFilterTest`（新）；全部通过，0 failures（见 Round 2 验证命令） |
-| Backend 集成测试 | `mvn verify`（failsafe，*IT，Testcontainers PG16） | ⚠️ 环境受限未执行（见注 1 / 注 3） |
+| Backend 集成测试 | `mvn verify`（failsafe，*IT，Testcontainers PG16） | ⚠️ Round 3 尝试执行（Docker daemon 在线）但 Testcontainers PostgreSQL 不可达（`Connection refused`），10/16 IT error；**如实标记 Pending，不标 PASS**（见注 4） |
 | Frontend 类型检查 | `npm run typecheck` | ⚠️ 16 错误，全部位于既有 Phase 4 字典文件（非本轮修改，见注 2） |
 | Frontend Lint | `npm run lint` | ✅ 通过（0 warnings） |
 | Frontend 测试 | `npm run test`（vitest） | ✅ 27 tests, 0 failures（本轮未新增前端测试） |
 | Frontend 构建 | `npm run build` | ⚠️ 受注 2 的 Phase 4 既有类型错误阻断 |
-| Docker Compose 配置 | `docker compose -f deploy/docker-compose.yml config` | ✅ 验证通过（仅缺省 `.env` 的环境变量告警，使用默认值）；默认 profile 已改为 `prod` |
-| 完整 Docker 运行时 + 浏览器登录 | `docker compose up --build` | ⚠️ 环境受限未执行（见注 1 / 注 3） |
+| Docker Compose 配置 | `docker compose -f deploy/docker-compose.yml config` | ✅ 解析出 `SPRING_PROFILES_ACTIVE=prod,http`（按文档 `cp .env.example .env` 生成本地 `.env` 后验证；`.env` gitignore 不提交） |
+| 完整 Docker 运行时 + 浏览器登录 | `docker compose up --build` | ⚠️ 环境受限未执行（见注 1 / 注 4） |
 
 ### Round 2 验证命令与结果（2026-09-02 晚）
 
@@ -176,6 +200,16 @@
 > **注 2（前端 typecheck / build）：** `npm run typecheck` 与 `npm run build` 报告的 16 个错误**全部位于上一轮已提交的 Phase 4 字典文件**（`CategoryPage.tsx` / `StandardPage.tsx` / `TagPage.tsx`）。这些文件属于 Phase 4+，**不在本轮"只修复 Phase 0–3"范围内**，本轮未改动。建议下一轮 Phase 4 Code Review 修复这些既有类型错误。
 >
 > **注 3（Round 2 集成测试如实报告）：** 按要求，未执行的 Integration Test **不标记为 PASS**。`mvn verify` 因本机无 Docker 运行时未能执行；Round 2 的 3 个 IT（`SessionExpirationIT` 更新、`SessionRegistryLifecycleIT`、`SessionFixationIT`）已写入仓库，其正确性依赖 Spring 标准机制（`HttpSessionEventPublisher` / `SessionAuthenticationStrategy` / `RestAuthenticationEntryPoint`），待具备 Docker 的 CI 环境回归。
+
+### Round 3 验证命令与结果（2026-09-02 凌晨）
+
+| 命令 | 结果 |
+|------|------|
+| `mvn clean test` | ✅ BUILD SUCCESS；27 tests, 0 failures（含 Round 2 新增单元测试；本轮仅改 `SessionFixationIT` 为 IT，不改单测逻辑） |
+| `mvn verify` | ⚠️ Docker daemon 在线，但 Testcontainers PostgreSQL 不可达（`java.net.ConnectException: Connection refused`，`CannotCreateTransaction`），16 IT 中 10 error、0 failure → **BUILD FAILURE**。**IT 不标记 PASS，标记 Pending** |
+| `docker compose -f deploy/docker-compose.yml config` | ✅ 解析出 `SPRING_PROFILES_ACTIVE: prod,http`（HIGH-03 闭环：默认 HTTP 部署不再产生 Secure JSESSIONID）；HTTPS 用 `prod` 恢复 `secure=true` |
+
+> **注 4（Round 3 集成测试如实报告）：** 本轮 Docker daemon 实际在线，因此按用户要求尝试了 `mvn verify`。但 Testcontainers 启动的 PostgreSQL 容器从测试 JVM 不可达（`Connection refused`），所有依赖 DB 的 IT（`AuthFlowIT` ×6 setUp、`SessionFixationIT`、`SessionRegistryLifecycleIT` 等）在建立 JPA 连接时失败。这仍是**基础设施/网络限制**（Testcontainers 在该沙箱内无法正确端口映射），**非代码缺陷**。故 Integration Test **如实标记 Pending，绝不标记 PASS**；3 个 IT 已在仓库，待具备可用 Docker/Testcontainers 的 CI 环境回归。
 
 ---
 

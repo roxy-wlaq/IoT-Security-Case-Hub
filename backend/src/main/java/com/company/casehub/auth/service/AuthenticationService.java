@@ -72,17 +72,21 @@ public class AuthenticationService {
         loginAttemptService.recordSuccess(key);
 
         UserPrincipal principal = (UserPrincipal) authentication.getPrincipal();
+
+        // Apply Spring Security's session authentication strategy FIRST. This both
+        // mitigates session fixation (ChangeSessionIdAuthenticationStrategy mints a new
+        // session id after authentication) and registers the new session with the
+        // SessionRegistry (RegisterSessionAuthenticationStrategy) so admin disable /
+        // password reset can expire it.
+        // It may throw SessionAuthenticationException, so it MUST run before we persist
+        // the authenticated SecurityContext: otherwise a failed strategy would leave an
+        // authenticated context bound to an unverified session (phase 0-3 review R3).
+        sessionAuthenticationStrategy.onAuthentication(authentication, httpRequest, httpResponse);
+
         SecurityContext context = SecurityContextHolder.createEmptyContext();
         context.setAuthentication(authentication);
         SecurityContextHolder.setContext(context);
         securityContextRepository.saveContext(context, httpRequest, httpResponse);
-
-        // Apply Spring Security's session authentication strategy. This both mitigates
-        // session fixation (ChangeSessionIdAuthenticationStrategy changes the session id
-        // after authentication) and registers the new session with the SessionRegistry
-        // (RegisterSessionAuthenticationStrategy) so admin disable / password reset can
-        // expire it. Uses the framework mechanism instead of hand-rolled session management.
-        sessionAuthenticationStrategy.onAuthentication(authentication, httpRequest, httpResponse);
 
         log.info("Login success user={} ip={}", principal.getUsername(), ip);
         return toResponse(principal);
