@@ -1,0 +1,23 @@
+# =============================================================================
+# 开发环境覆盖文件（可选）
+#
+# 用法：
+#   cd deploy
+#   docker compose -f docker-compose.yml -f docker-compose.override.yml up --build -d
+#
+# 作用：
+#   - 把 postgres / backend 端口暴露到宿主机，方便本地调试
+#   - 不修改生产 compose；生产部署时不要加载本文件
+#
+# 警告：5432 只应在开发/维护时临时开放（Deployment 文档第 7 节）。
+# =============================================================================
+
+services:
+
+  backend:
+    ports:
+      - "${BACKEND_DEBUG_PORT:-8080}:8080"
+
+  postgres:
+    ports:
+      - "${POSTGRES_DEBUG_PORT:-5432}:5432"
