@@ -279,7 +279,7 @@
 
 | 内容 | Commit |
 |------|--------|
-| HIGH×1 / MEDIUM×2 / LOW×1 全部修复 | `9d1fe66` — `fix(phase4/5): resolve code review findings (HIGH x1, MEDIUM x2, LOW x1)` |
+| HIGH×1 / MEDIUM×2 / LOW×1 全部修复 | **`6c30914`** — `fix(phase4/5): resolve code review findings (HIGH x1, MEDIUM x2, LOW x1)`（本行 SHA 由紧随其后的文档提交写入，故与修复提交本身不是同一条） |
 
 ### 新增/修改测试
 
