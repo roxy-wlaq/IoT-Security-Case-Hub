@@ -28,8 +28,16 @@ public enum ErrorCode {
     CATEGORY_HAS_CHILDREN(HttpStatus.CONFLICT, "Cannot disable a category that has active children."),
     TAG_NOT_FOUND(HttpStatus.NOT_FOUND, "Tag not found."),
     TAG_NAME_DUPLICATE(HttpStatus.CONFLICT, "Tag name already exists."),
+    TAG_CODE_DUPLICATE(HttpStatus.CONFLICT, "Tag code already exists."),
     TOOL_NOT_FOUND(HttpStatus.NOT_FOUND, "Tool not found."),
     TOOL_NAME_DUPLICATE(HttpStatus.CONFLICT, "Tool name already exists."),
+    TOOL_CODE_DUPLICATE(HttpStatus.CONFLICT, "Tool code already exists."),
+
+    // ---- Capability Library (Phase 5) ----
+    CAPABILITY_NOT_FOUND(HttpStatus.NOT_FOUND, "Capability not found."),
+    CAPABILITY_CODE_DUPLICATE(HttpStatus.CONFLICT, "Capability code already exists."),
+    CAPABILITY_PARENT_INVALID(HttpStatus.BAD_REQUEST, "Parent capability does not exist."),
+    CAPABILITY_CYCLE_DETECTED(HttpStatus.CONFLICT, "Capability tree must not contain a cycle."),
 
     // ---- Generic (reused by later phases) ----
     VALIDATION_FAILED(HttpStatus.BAD_REQUEST, "Request validation failed."),
