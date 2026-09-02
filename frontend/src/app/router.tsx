@@ -1,4 +1,5 @@
 import { createBrowserRouter, RouterProvider } from 'react-router-dom';
+import type { ComponentType } from 'react';
 import { RouteGuard } from '@/shared/components/RouteGuard';
 import { AppLayout } from '@/features/layout/AppLayout';
 import { LoginPage } from '@/features/auth/LoginPage';
@@ -7,17 +8,37 @@ import { PlaceholderPage } from '@/pages/PlaceholderPage';
 import { Forbidden } from '@/pages/Forbidden';
 import { NotFound } from '@/pages/NotFound';
 import { NAVIGATION_ITEMS } from '@/shared/config/navigation';
+import { StandardAdminPage } from '@/features/dictionary/pages/StandardPage';
+import { CategoryAdminPage } from '@/features/dictionary/pages/CategoryPage';
+import { TagAdminPage } from '@/features/dictionary/pages/TagPage';
+import { ToolPage } from '@/features/dictionary/pages/ToolPage';
+import { CapabilityAdminPage } from '@/features/capability/pages/CapabilityAdminPage';
+
+/**
+ * 已实现模块的页面映射（Phase 4 基础字典 / Phase 5 能力库）。
+ * 不在映射里的导航项继续渲染占位页，直到对应 Phase 完成。
+ */
+const pageComponents: Record<string, ComponentType> = {
+  '/capabilities': CapabilityAdminPage,
+  '/admin/standards': StandardAdminPage,
+  '/admin/categories': CategoryAdminPage,
+  '/admin/tags': TagAdminPage,
+  '/tools': ToolPage,
+};
 
 const protectedRoutes = [
   { index: true, element: <Dashboard /> },
-  ...NAVIGATION_ITEMS.filter((item) => item.path !== '/').map((item) => ({
-    path: item.path.slice(1),
-    element: (
-      <RouteGuard permission={item.permission} roles={item.roles}>
-        <PlaceholderPage item={item} />
-      </RouteGuard>
-    ),
-  })),
+  ...NAVIGATION_ITEMS.filter((item) => item.path !== '/').map((item) => {
+    const PageComponent = pageComponents[item.path];
+    return {
+      path: item.path.slice(1),
+      element: (
+        <RouteGuard permission={item.permission} roles={item.roles}>
+          {PageComponent ? <PageComponent /> : <PlaceholderPage item={item} />}
+        </RouteGuard>
+      ),
+    };
+  }),
   { path: '403', element: <Forbidden /> },
   { path: '*', element: <NotFound /> },
 ];

@@ -7,12 +7,13 @@
 
 ## Current Phase
 
-**Phase 0–3 已完成并通过 Code Review 修复**，代码已集成到 `dev/v1-implementation` 分支。
+**Phase 0–5 已完成**，代码已集成到 `dev/v1-implementation` 分支。
 
 - 实现状态：`Implementation Complete / Static + Partial Runtime Verification`
 - **Round 1（2026-09-02 早）：** 修复 **8 项** Phase 0–3 Code Review 发现（HIGH-01/02/03、MEDIUM-01/02/03/04、LOW-01），每 HIGH 增加 Regression Test，并补齐前端基础测试（MEDIUM-01）。（注：此前内部记录曾误写为"9 项"，实际表格为 8 项，本轮已校正。）
 - **Round 2（2026-09-02 晚）：** 修复 **8 项** Review Round 2 发现（见下方独立章节）—— LoginAttempt 回归、HTTP overlay profile、SessionExpiry 双重注册/统一错误、SessionRegistry 生命周期、Session Fixation、文档与 must_change_password 语义。
 - **Round 3（2026-09-02 凌晨）：** 最后小范围修复 **3 项**（HIGH×1、MEDIUM×1、LOW×1）—— 默认 Docker HTTP 与 Secure Cookie 冲突（HIGH-03 真正闭环）、登录后 SessionAuthenticationStrategy 顺序、加强 SessionFixationIT。不开发 Phase 4。
+- **Phase 4 + Phase 5 Wave（2026-09-02）：** 双 Agent 并行实现基础字典与能力库（见下方 Phase 4 / Phase 5 章节），Lead 集成 Router/Sidebar 并全量验证。不开始 Phase 6。
 - 技术栈保持冻结（Java 21 / Spring Boot 3 / Spring Security / Server-side Session / CSRF / PostgreSQL 16 / Flyway / React+TS / TanStack Query / Ant Design / Nginx / Docker Compose）。未引入 JWT，未关闭 CSRF，未重新设计架构。
 
 ---
@@ -81,6 +82,41 @@
 | TypeScript strict | ✅ | `tsc -b --noEmit` 通过 |
 | ESLint | ✅ | `eslint . --max-warnings 0` 通过 |
 | Vite Build | ✅ | `vite build` 通过（3174 模块，7s） |
+
+---
+
+### Phase 4 — 基础字典 ✅ Completed（2026-09-02）
+
+| 项目 | 状态 | 说明 |
+|------|------|------|
+| V003__reference_catalog.sql | ✅ | standard_task_types / categories（两级 CHECK 约束）/ tags / tools；tags/tools 增加用户指定的 `code` 列（相对 Schema V1.0 §9 的有意扩展，已在 SQL 注释声明）；pg_trgm GIN 搜索索引 |
+| Standard / Task Type | ✅ | GET/POST/PUT `/api/v1/standard-task-types`（search/enabled/type 过滤）；type ∈ {STANDARD, TASK_TYPE}；code 大小写不敏感唯一 |
+| Category | ✅ | GET `/api/v1/categories/tree`、POST/PUT；level 服务端由 parentId 推导；两级树（Level 2 下禁止 Level 3）；拒绝 self parent / 非法 parent / 后代作 parent（含祖先链遍历） |
+| Tag | ✅ | GET/POST/PUT `/api/v1/tags`（search/enabled）；code + name 双唯一（大小写不敏感） |
+| Tool | ✅ | GET 列表+详情、POST/PUT `/api/v1/tools`；仅元数据 CRUD，附件上传留待后续 Storage Phase |
+| RBAC | ✅ | 读：任意登录用户；写：`@PreAuthorize hasAuthority('{standard,category,tag,tool}:manage')`（权限码沿用 V002 seed，未新造） |
+| Frontend | ✅ | `/admin/standards` `/admin/categories`（Tree/TreeTable 两级树）/`/admin/tags` `/tools`；Table + Modal Form（React Hook Form + Zod）；TanStack Query；PermissionGuard 控制管理按钮 |
+| Tests | ✅ | 4 组 Service 单测（含 Category level1/2 成功、level3/self/invalid/后代 parent 拒绝）+ 4 组 @WebMvcTest RBAC 测试；`mvn clean test` 111 tests 0 failures |
+| 前端既有 16 个 TS 错误 | ✅ | 本轮全部修复（Standard type 字面量化、Category enabled 类型、TagPage antd Tag 标识符撞车改 `Tag as AntdTag`）；typecheck 0 error |
+
+### Phase 5 — Capability Library ✅ Completed（2026-09-02）
+
+| 项目 | 状态 | 说明 |
+|------|------|------|
+| V004__capability_library.sql | ✅ | `casehub.capabilities` 自关联树；uq code + LOWER(code) 唯一；fk parent ON DELETE RESTRICT；注释声明环校验由 Service 层承担、停用不物理删除 |
+| Backend | ✅ | `com.company.casehub.capability`（entity/repository/dto record/service/controller）；code 冲突 → ConflictException；非法 parent → BusinessRuleException |
+| Cycle Validation | ✅ | CapabilityService 沿 parent 链向上遍历 + visited Set：拒绝 self cycle / two-node cycle / deep cycle；未引入图数据库 |
+| API | ✅ | GET `/api/v1/capabilities/tree`、POST `/api/v1/capabilities`、PUT `/{id}`、POST `/{id}/enable`、POST `/{id}/disable`；读=登录用户，写=`capability:manage_library` |
+| Enable/Disable | ✅ | 仅翻转 enabled，不物理 DELETE（历史引用保留）；不做子孙级联 |
+| Frontend | ✅ | `/admin/capabilities`：左 Tree + 右 Detail Panel；Add Root / Add Child / Edit / Enable / Disable（PermissionGuard `capability:manage_library`）；无任何 YES/NO/UNKNOWN（属 Project Capability，后续 Phase） |
+| Tests | ✅ | CapabilityServiceTest 18 项（create root/child、update、enable、disable、self/two-node/deep cycle、invalid parent、duplicate code）+ CapabilityControllerRbacTest 12 项（read allowed / tester denied / admin allowed） |
+| 语义边界 | ✅ | Capability Tree 与 Category Tree 两张独立表；实体不含任何项目结论字段 |
+
+> **Phase 4/5 Wave 测试与运行情况（如实记录）：**
+> - 真实运行：`mvn clean test`（surefire，*Test 单元+RBAC 切片）**111 tests, 0 failures, 0 errors**；前端 `typecheck` 0 error / `lint` 0 warning / `test` 27 passed / `build` 成功。
+> - 未运行：`mvn verify` 的 `*IT`（Testcontainers PostgreSQL 在本沙箱不可达，沿用 Round 3 结论，IT 维护 Pending，不标 PASS）；未搭建完整 Docker 运行时做浏览器端到端验证。
+> - 前端 RBAC 测试基座：`common/MethodSecurityTestConfig`（@WebMvcTest 切片内恢复 @EnableMethodSecurity；Lead 预置共享，避免两个 Agent 各写一份）。POST/PUT 测试必须 `.with(csrf())`。
+> - Migration 备注：V003 由 `V003__dictionary_tables.sql` 重命名为 `V003__reference_catalog.sql`（Lead 统一管理版本命名）。**已按旧 V003 建过库的开发库需 `flyway repair` 或重建 volume**；全新环境无影响。
 
 ---
 
@@ -213,9 +249,23 @@
 
 ---
 
+### Phase 4/5 Wave 验证命令与结果（2026-09-02）
+
+| 命令 | 结果 |
+|------|------|
+| `mvn clean test`（集成后全量） | ✅ BUILD SUCCESS；**111 tests, 0 failures, 0 errors**（Phase 0–3 基线 27 + Phase 4 字典 54 + Phase 5 能力库 30） |
+| `mvn verify`（*IT） | ⚠️ 未执行：Testcontainers PostgreSQL 仍不可达（沿用 Round 3 结论），IT 维持 Pending |
+| `npm run typecheck` | ✅ **0 error**（既有 16 个错误本轮全部修复） |
+| `npm run lint` | ✅ 通过（0 warnings，`--max-warnings 0`） |
+| `npm run test` | ✅ 27 tests, 0 failures |
+| `npm run build` | ✅ 成功（仅 chunk >500kB 提示，非错误） |
+| Agent worktree 验证 | ✅ phase4-reference：mvn 81 tests 0 failures、前端四命令全绿；phase5-capability：mvn 57 tests 0 failures、capability 文件 0 error 0 warning、27 既有测试通过 |
+
+---
+
 ## In Progress
 
-无。Phase 0–3 已完成集成。
+无。Phase 0–5 已完成集成。
 
 ---
 
@@ -232,31 +282,19 @@
 | Backend Foundation | `agent/backend-foundation` | `aa75316` | 67 文件 / 2695 行 |
 | Frontend Foundation | `agent/frontend-foundation` | `a5f17cd` | 43 文件 / 7529 行 |
 | Deployment Foundation | `agent/deployment` | `a2a6b31` | 8 文件 / 1059 行 |
+| Phase 4 Reference（Agent A） | `agent/phase4-reference` | `f320173` | 54 文件 / +2913 −322 |
+| Phase 5 Capability（Agent B） | `agent/phase5-capability` | `ad4a682` | 17 文件 |
 
-所有 agent 分支已合并到 `dev/v1-implementation`。
+所有 agent 分支已合并到 `dev/v1-implementation`（Phase 4/5 均为 no-conflict merge，V003/V004 与各模块包零交叉）。
 
 ---
 
 ## Next Wave
 
-根据 Implementation Plan V1.1，下一个开发阶段为 **Phase 4：基础字典**。
+Code Review 通过后，下一轮开发（**本轮未开始，遵守 Phase 边界**）：
 
-### Phase 4 — 基础字典
-
-依赖：Phase 2（RBAC）
-
-| 任务 | 模块 | 可并行 |
-|------|------|--------|
-| Standard / Task Type CRUD | backend + frontend | ✅ |
-| Category（两级）CRUD | backend + frontend | ✅ |
-| Tag CRUD | backend + frontend | ✅ |
-| Tool CRUD | backend + frontend | ✅ |
-
-后续 Phase 依赖关系：
-
-```
-Phase 4（字典）→ Phase 5（Capability Library）→ Phase 6（Master TestCase 基础）→ ...
-```
+- **Phase 6 — Master Test Case 基础**
+- **Phase 7 — Test Case Lifecycle**
 
 ---
 
