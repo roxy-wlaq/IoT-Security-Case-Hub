@@ -141,6 +141,7 @@ CREATE TABLE IF NOT EXISTS casehub.test_case_attachments (
     description         TEXT,
     uploaded_by         UUID NOT NULL,
     created_at          TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT pk_test_case_attachments PRIMARY KEY (id),
     CONSTRAINT uq_test_case_attachments_storage_key UNIQUE (storage_key),
     CONSTRAINT fk_test_case_attachments_version FOREIGN KEY (test_case_version_id)
