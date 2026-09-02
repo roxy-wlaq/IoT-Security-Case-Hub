@@ -227,6 +227,46 @@
 
 ---
 
+## Phase 7 Code Review Round — Fixed（2026-09-03）
+
+> 基线：`dev/v1-implementation` @ `944de35452a0ad63cfe6b54ea5404861eb388200`。范围：仅闭环 Phase 7 Code Review 的 6 项发现，不启动 Phase 8，不修改数据库 Schema（Flyway 最高版本仍为 **V008**，无 V009）。权限/可见性统一收敛到 `TestCaseAccessPolicy` 单一策略，`@PreAuthorize` 仍保留权限码第一闸门。
+
+| 优先级 | 编号 | 问题 | 根因修复 | 关键文件 |
+|--------|------|------|----------|----------|
+| HIGH | HIGH-01 | Deprecated / Historical 版本可见性：所有登录用户可读 PUBLISHED + DEPRECATED；DRAFT/REVIEW 仅 ADMIN / owner / contributor；且不得将历史 PUBLISHED 伪造成当前版本 | 列表 SQL 可见性子句统一为 `:admin=TRUE OR status='PUBLISHED' OR status='DEPRECATED' OR ((DRAFT|REVIEW) AND (created_by=principal OR EXISTS revision_contributors))`；`TestCaseLifecycleService.isVisible` 与 `TestCaseQueryService.visibleVersions` 全部委托 `TestCaseAccessPolicy.isVersionVisible`；详情面 `visibleVersion` 始终取当前最新可见版本，历史 PUBLISHED 在版本历史中如实呈现但不覆盖 `isCurrentVersion` | `PostgresTestCaseLibraryQueryRepository.java`、`TestCaseAccessPolicy.java`、`TestCaseLifecycleService.java`、`TestCaseQueryService.java` |
+| HIGH | HIGH-02 | TESTER 修订贡献者缺 Draft 编辑权限（无全局 `test_case:draft_edit`） | 新增资源级判定 `TestCaseAccessPolicy.canEditDraftById(masterId, principal)`（owner/contributor/ADMIN 对最新 open DRAFT 可编辑/提交）；Controller `updateDraft` / `submitReview` 的 `@PreAuthorize` 改为 `hasAuthority('test_case:draft_edit') or @testCaseAccessPolicy.canEditDraftById(#masterId, principal)`；贡献者临时编辑权不再依赖全局 permission 码 | `TestCaseAccessPolicy.java`、`TestCaseController.java`、`TestCaseLifecycleController.java` |
+| HIGH | HIGH-03 | Reject 后若无 PUBLISHED 进入死胡同（被拒 REVIEW+closed 无法再修订） | `createRevision` 接受 REJECT 来源版本；`resolveRevisionSource` 在无 PUBLISHED 时回退到最新的被拒 REVIEW 版本；被拒版本保持 REVIEW + `revision_closed=true`，新开 DRAFT 沿用其 major、minor=同 major MAX+1，并复制步骤/关系；`TestCaseAccessPolicy.hasRevisableRejected` 供 AllowedActions 暴露 Create-Revision | `TestCaseLifecycleService.java`、`TestCaseAccessPolicy.java` |
+| MEDIUM | MEDIUM-01 | 可见性策略分散（列表 SQL / Service / Controller 各写一份） | 收敛为单一策略 `TestCaseAccessPolicy.isVersionVisible(master, version, principal)`；列表 SQL、详情 `isVisible`、版本列表 `visibleVersions` 全部调用它 | `TestCaseAccessPolicy.java`、`PostgresTestCaseLibraryQueryRepository.java`、`TestCaseQueryService.java`、`TestCaseLifecycleService.java` |
+| MEDIUM | MEDIUM-02 | Deprecate 未使用 Master 行锁，并发下可能重复弃用 | `deprecate()` 改用 `masterRepository.findByIdWithLock`（PESSIMISTIC_WRITE）取 Master 行锁后再翻转状态；发布/创建修订/弃用均在同一锁路径，保证串行 | `TestCaseLifecycleService.java`、`TestCaseLifecycleServiceTest.java`（deprecate* 测试改用 `findByIdWithLock` stub） |
+| MEDIUM | MEDIUM-03 | 前端 Rejected fixture / 可见性测试错误（被拒版本仍可点 驳回/退回/发布） | 修正 `rejectedDetail` fixture 为只读（全部 lifecycle 动作 `false`）；新增 `deprecatedDetail` / `publishedWithRevisionDetail` / `testerContributorDraftDetail` 与 5 个可见性测试：Rejected 只读、Deprecated 只读（不伪装为 PUBLISHED）、Create-Revision 在 PUBLISHED 当前版本可见、TESTER 贡献者按 `allowedActions.editDraft=true` 可编辑 | `frontend/.../__tests__/TestCaseDetailLifecycle.test.tsx`、`frontend/.../shared/types/testCase.ts`（类型已声明 latestReviewAction / AllowedActions 语义） |
+
+### Phase 7 Review Fix 新增/修改测试
+
+| 测试文件 | 覆盖 |
+|----------|------|
+| `backend/.../service/TestCaseAccessPolicyTest.java`（+7） | HIGH-01 可见性：DEPRECATED/PUBLISHED 任意登录可读、DRAFT/REVIEW 仅 owner/contributor/admin、被拒 REVIEW 仅 owner/contributor/admin；HIGH-02 `canEditDraftById` 贡献者 true / 非成员 false |
+| `backend/.../controller/TestCaseLifecycleControllerRbacTest.java`（+2） | TESTER 无权限不能 submitReview（500→403）；TESTER 贡献者 `canEditDraftById=true` 可 submitReview（200） |
+| `backend/.../controller/TestCaseControllerRbacTest.java`（+1） | TESTER 贡献者 `canEditDraftById=true` 可编辑 Draft（PUT 200） |
+| `backend/.../service/TestCaseLifecycleServiceTest.java`（改） | deprecate* 改用 `findByIdWithLock`；`createRevision` 来源非 PUBLISHED 路径；`@BeforeEach` lenient stub `isVersionVisible=true` 避免 UnnecessaryStubbing |
+| `backend/.../service/TestCaseQueryServiceTest.java`（改） | detail 测试补齐 `isVersionVisible=true` stub 使详情面渲染 |
+| `backend/.../integration/TestCaseLifecycleIT.java`（+15） | HIGH-01：普通用户可读他人 DEPRECATED、历史 PUBLISHED 不伪装当前、版本历史含 DEPRECATED、列表/详情可见性一致；HIGH-03：初始被拒后可开新 DRAFT、被拒版本保持 REVIEW+closed、新版本新 ID、minor 递增、内容复制、旧被拒版本保持 REVIEW+closed；MEDIUM-02：publish→revise→publish→deprecate 在 Master 锁路径串行、v1.1 DEPRECATED / v1.0 仍 PUBLISHED；HIGH-02：真实 TESTER 贡献者编辑被指派 DRAFT、不可编辑他人 DRAFT、非贡献者不可编辑、不可编辑 PUBLISHED、不可管理贡献者 |
+| `frontend/.../__tests__/TestCaseDetailLifecycle.test.tsx`（+5） | Rejected 只读（隐藏全部 lifecycle 按钮）、Deprecated 只读（不伪装 PUBLISHED）、PUBLISHED 当前版本显示创建修订、TESTER 贡献者按 allowedActions.editDraft 可编辑 |
+
+### Phase 7 Review Fix 验证结果（真实执行）
+
+| 命令 | 结果 |
+|------|------|
+| `cd backend && mvn clean test` | ✅ BUILD SUCCESS；**Surefire 186 tests / 0 failures / 0 errors / 0 skipped** |
+| `cd backend && mvn clean verify` | ✅ BUILD SUCCESS；**Failsafe 74 PostgreSQL Testcontainers IT / 0 failures / 0 errors / 0 skipped**（含 `TestCaseLifecycleIT` 15+）；日志确认 Flyway V001–V008 全部成功迁移（`now at version v008`），**无 V009** |
+| `cd frontend && npm run typecheck` | ✅ 0 error |
+| `cd frontend && npm run lint` | ✅ 0 warning（`--max-warnings 0`） |
+| `cd frontend && npm run test` | ✅ **10 files / 55 tests** 全绿 |
+| `cd frontend && npm run build` | ✅ 成功（Vite 转换 3203 modules，仅 chunk >500 kB warning） |
+
+> **操作红线：** 本轮所有改动仅提交并推送到 `dev/v1-implementation` 分支，**不推送 `main`，不开 PR**，等待 Reviewer 评审。
+
+---
+
 ## Phase 0–3 Code Review Findings — Fixed (2026-09-02)
 
 > 范围：仅修复 Phase 0–3 Review 发现，不扩大到 Phase 4+，不重构，不更换技术栈。
