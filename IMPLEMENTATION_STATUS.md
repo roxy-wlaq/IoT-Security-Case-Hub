@@ -162,6 +162,24 @@
 - 新增 PostgreSQL IT：`MasterTestCaseSchemaIT` 8 项，`TestCaseDraftIT` 7 项；新增接口契约一致性测试 1 项。
 - Phase 7 未开始；下一迁移号为 V008，未实现发布、审核、驳回、弃用、决策点、DAG、项目和生成等后续能力。
 
+### Phase 6 Query Semantics Final Review — Fixed（2026-09-02）
+
+> 本轮仅处理 Phase 6 Query Semantics Review：HIGH ×1、MEDIUM ×2；无数据库 Schema 修改，V008 未创建。
+
+| 优先级 | 发现 | 修复与证据 |
+|--------|------|------------|
+| HIGH | 多版本 Master 使用 `MIN(all versions.caseName)` 排序，可能与最终展示版本不一致 | 列表先按请求条件和可见性确定唯一 List Version，再以该 Version 的 `caseName` 排序并用同一 Version 构造 Summary；PostgreSQL IT 验证 Alpha/Zulu 与 Beta 的升降序结果，以及 `caseName`、`versionLabel`、`status` 一致。 |
+| MEDIUM | Version 过滤命中版本与 Response 独立选择的 visible version 不一致 | `status`、版本侧 `q`、`toolIds`、`standardTaskTypeIds` 先筛选 Version，Summary 直接使用匹配的 List Version；PostgreSQL IT 覆盖 Draft/Published 及三类版本侧过滤。 |
+| MEDIUM | Summary `updatedAt` 读取 Master 时间 | Summary `updatedAt` 改为 List Version 的 `updatedAt`；PostgreSQL IT 验证 Draft 更新后列表时间随实际 Version 更新。 |
+
+**修复 SHA 与验证结果：**
+
+- 修复提交：`da25a69 fix(phase6): align list summaries with selected version`。
+- Backend：`mvn -q clean test` 通过，128 tests / 0 failures / 0 errors / 0 skipped；`mvn -q verify` 通过，PostgreSQL Testcontainers IT 通过；Flyway 实际最高版本为 V007。
+- Query 单元测试：`multiVersionCaseNameSortSemantics`、`statusFilterReturnsMatchingVersion`、`summaryUpdatedAtUsesVersion` 均通过；契约测试同步断言 List Version 语义。
+- Frontend：`npm run typecheck`、`npm run lint`、`npm run test`（9 files / 39 tests）、`npm run build` 均通过；仅保留既有 Vite bundle size warning。
+- `docs/phase6-api-contract.md` 已记录最终实际接口及 List Version Selection Semantics；未修改前端 API contract。
+
 ---
 
 ## Phase 0–3 Code Review Findings — Fixed (2026-09-02)
