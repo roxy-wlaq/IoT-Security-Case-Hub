@@ -15,6 +15,8 @@ import com.company.casehub.testcase.dto.CreateRevisionRequest;
 import com.company.casehub.testcase.dto.LifecycleActionRequest;
 import com.company.casehub.testcase.dto.StepRequest;
 import com.company.casehub.testcase.dto.TestCaseDetailResponse;
+import com.company.casehub.testcase.dto.UpdateDraftRequest;
+import com.company.casehub.testcase.dto.VersionSummaryResponse;
 import com.company.casehub.testcase.entity.MasterTestCaseEntity;
 import com.company.casehub.testcase.entity.ReviewRecordAction;
 import com.company.casehub.testcase.entity.SelectionMode;
@@ -491,6 +493,319 @@ class TestCaseLifecycleIT extends AbstractIntegrationTest {
     }
 
     // -------------------------------------------------------------------------
+    // HIGH-01 — Deprecated / Historical Version Visibility (all logged-in users)
+    // -------------------------------------------------------------------------
+
+    @Test
+    void normalUserCanReadOthersDeprecatedVersion() {
+        TestCaseDetailResponse created = createDraft("H1-001", "Deprecated Visibility");
+        UUID masterId = created.id();
+        UUID versionId = created.visibleVersion().id();
+
+        lifecycleService.submitReview(masterId, new LifecycleActionRequest("submit"), coordinatorPrincipal);
+        lifecycleService.publish(masterId, versionId, new LifecycleActionRequest("publish"), adminPrincipal);
+        lifecycleService.deprecate(masterId, versionId, new LifecycleActionRequest("obsolete"), adminPrincipal);
+
+        UserPrincipal viewer = viewerPrincipal();
+        // Detail surface shows the DEPRECATED version to an unrelated logged-in user.
+        TestCaseDetailResponse detail = queryService.detail(masterId, viewer);
+        assertThat(detail.visibleVersion().status()).isEqualTo("DEPRECATED");
+        // The explicit version endpoint is also visible.
+        assertThat(queryService.version(masterId, versionId, viewer).status()).isEqualTo("DEPRECATED");
+        // And it appears in the library list.
+        var listed = queryService.list(null, null, null, null, null, null, 0, 20, "updatedAt,desc", viewer);
+        assertThat(listed.content()).extracting("id").contains(masterId);
+    }
+
+    @Test
+    void historicalPublishedNotMasqueradedAsCurrent() {
+        TestCaseDetailResponse created = createDraft("H1-002", "Current Switch Visibility");
+        UUID masterId = created.id();
+        UUID v10 = created.visibleVersion().id();
+        lifecycleService.submitReview(masterId, new LifecycleActionRequest("submit"), coordinatorPrincipal);
+        lifecycleService.publish(masterId, v10, new LifecycleActionRequest("publish"), adminPrincipal);
+
+        // v1.1 published — v1.0 loses current flag.
+        lifecycleService.createRevision(masterId, new CreateRevisionRequest(null, "rev"), coordinatorPrincipal);
+        UUID v11 = findLatestDraft(masterId).getId();
+        lifecycleService.submitReview(masterId, new LifecycleActionRequest("submit"), coordinatorPrincipal);
+        lifecycleService.publish(masterId, v11, new LifecycleActionRequest("publish"), adminPrincipal);
+
+        UserPrincipal viewer = viewerPrincipal();
+        // A normal user sees the CURRENT published (v1.1), not the historical v1.0.
+        TestCaseDetailResponse detail = queryService.detail(masterId, viewer);
+        assertThat(detail.visibleVersion().status()).isEqualTo("PUBLISHED");
+        assertThat(detail.visibleVersion().id()).isEqualTo(v11);
+        assertThat(detail.visibleVersion().isCurrentVersion()).isTrue();
+
+        // Now deprecate the current version. The historical v1.0 must surface (not flagged current),
+        // and no version may be reported as current.
+        lifecycleService.deprecate(masterId, v11, new LifecycleActionRequest("obsolete"), adminPrincipal);
+        TestCaseDetailResponse afterDeprecate = queryService.detail(masterId, viewer);
+        assertThat(afterDeprecate.visibleVersion().status()).isEqualTo("PUBLISHED");
+        assertThat(afterDeprecate.visibleVersion().id()).isEqualTo(v10);
+        assertThat(afterDeprecate.visibleVersion().isCurrentVersion()).isFalse();
+        assertThat(afterDeprecate.currentVersion()).isNull();
+    }
+
+    @Test
+    void deprecatedVersionVisibleInVersionHistory() {
+        TestCaseDetailResponse created = createDraft("H1-003", "Deprecated History");
+        UUID masterId = created.id();
+        UUID versionId = created.visibleVersion().id();
+        lifecycleService.submitReview(masterId, new LifecycleActionRequest("submit"), coordinatorPrincipal);
+        lifecycleService.publish(masterId, versionId, new LifecycleActionRequest("publish"), adminPrincipal);
+        lifecycleService.deprecate(masterId, versionId, new LifecycleActionRequest("obsolete"), adminPrincipal);
+
+        List<VersionSummaryResponse> history = queryService.versions(masterId, viewerPrincipal());
+        assertThat(history).extracting("id").contains(versionId);
+        assertThat(history).extracting("status").contains("DEPRECATED");
+    }
+
+    @Test
+    void listDetailVersionVisibilityConsistentForDeprecated() {
+        TestCaseDetailResponse created = createDraft("H1-004", "Consistency");
+        UUID masterId = created.id();
+        UUID versionId = created.visibleVersion().id();
+        lifecycleService.submitReview(masterId, new LifecycleActionRequest("submit"), coordinatorPrincipal);
+        lifecycleService.publish(masterId, versionId, new LifecycleActionRequest("publish"), adminPrincipal);
+        lifecycleService.deprecate(masterId, versionId, new LifecycleActionRequest("obsolete"), adminPrincipal);
+
+        UserPrincipal viewer = viewerPrincipal();
+        // The three read APIs must agree on visibility for the same user.
+        assertThat(queryService.detail(masterId, viewer).visibleVersion().status()).isEqualTo("DEPRECATED");
+        assertThat(queryService.version(masterId, versionId, viewer).status()).isEqualTo("DEPRECATED");
+        assertThat(queryService.list(null, null, null, null, null, null, 0, 20, "updatedAt,desc", viewer).content())
+                .extracting("id").contains(masterId);
+    }
+
+    // -------------------------------------------------------------------------
+    // HIGH-03 — Reject then Create Revision (never-published master escape hatch)
+    // -------------------------------------------------------------------------
+
+    private UUID[] rejectInitialDraft(String code, String name) {
+        TestCaseDetailResponse created = createDraft(code, name);
+        UUID masterId = created.id();
+        UUID firstVersionId = created.visibleVersion().id();
+        lifecycleService.submitReview(masterId, new LifecycleActionRequest("submit"), coordinatorPrincipal);
+        lifecycleService.reject(masterId, firstVersionId, new LifecycleActionRequest("non-compliant steps"), adminPrincipal);
+        return new UUID[]{masterId, firstVersionId};
+    }
+
+    @Test
+    void initialRejectedRevisionCanCreateNewDraft() {
+        UUID[] ids = rejectInitialDraft("H3-001", "Rejected Revision");
+        UUID masterId = ids[0];
+
+        // No PUBLISHED exists; createRevision must fall back to the rejected REVIEW version.
+        TestCaseDetailResponse afterRevision = lifecycleService.createRevision(
+                masterId, new CreateRevisionRequest(null, "fix after reject"), coordinatorPrincipal);
+        UUID newDraftId = afterRevision.draftVersion() != null
+                ? afterRevision.draftVersion().id() : findLatestDraft(masterId).getId();
+        TestCaseVersionEntity newDraft = versionRepository.findById(newDraftId).orElseThrow();
+        assertThat(newDraft.getStatus()).isEqualTo(TestCaseVersionStatus.DRAFT);
+        assertThat(newDraft.isRevisionClosed()).isFalse();
+    }
+
+    @Test
+    void rejectedVersionRemainsClosed() {
+        UUID[] ids = rejectInitialDraft("H3-002", "Rejected Closed");
+        UUID firstVersionId = ids[1];
+        lifecycleService.createRevision(ids[0], new CreateRevisionRequest(null, "rev"), coordinatorPrincipal);
+        TestCaseVersionEntity rejected = versionRepository.findById(firstVersionId).orElseThrow();
+        assertThat(rejected.isRevisionClosed()).isTrue();
+        assertThat(rejected.getStatus()).isEqualTo(TestCaseVersionStatus.REVIEW);
+    }
+
+    @Test
+    void newRevisionHasNewId() {
+        UUID[] ids = rejectInitialDraft("H3-003", "New Id");
+        UUID firstVersionId = ids[1];
+        TestCaseDetailResponse afterRevision = lifecycleService.createRevision(
+                ids[0], new CreateRevisionRequest(null, "rev"), coordinatorPrincipal);
+        UUID newDraftId = afterRevision.draftVersion() != null
+                ? afterRevision.draftVersion().id() : findLatestDraft(ids[0]).getId();
+        assertThat(newDraftId).isNotEqualTo(firstVersionId);
+    }
+
+    @Test
+    void newRevisionUsesNextVersionNumber() {
+        UUID[] ids = rejectInitialDraft("H3-004", "Next Number");
+        TestCaseDetailResponse afterRevision = lifecycleService.createRevision(
+                ids[0], new CreateRevisionRequest(null, "rev"), coordinatorPrincipal);
+        UUID newDraftId = afterRevision.draftVersion() != null
+                ? afterRevision.draftVersion().id() : findLatestDraft(ids[0]).getId();
+        TestCaseVersionEntity newDraft = versionRepository.findById(newDraftId).orElseThrow();
+        // Source was v1.0 → new revision is v1.1.
+        assertThat(newDraft.getVersionMajor()).isEqualTo(1);
+        assertThat(newDraft.getVersionMinor()).isEqualTo(1);
+    }
+
+    @Test
+    void newRevisionCopiesContent() {
+        UUID[] ids = rejectInitialDraft("H3-005", "Copy Content");
+        UUID firstVersionId = ids[1];
+        TestCaseVersionEntity original = versionRepository.findById(firstVersionId).orElseThrow();
+        TestCaseDetailResponse afterRevision = lifecycleService.createRevision(
+                ids[0], new CreateRevisionRequest(null, "rev"), coordinatorPrincipal);
+        UUID newDraftId = afterRevision.draftVersion() != null
+                ? afterRevision.draftVersion().id() : findLatestDraft(ids[0]).getId();
+        TestCaseVersionEntity newDraft = versionRepository.findById(newDraftId).orElseThrow();
+        assertThat(newDraft.getCaseName()).isEqualTo(original.getCaseName());
+        assertThat(newDraft.getBasedOnVersion().getId()).isEqualTo(firstVersionId);
+        assertThat(stepRepository.findByTestCaseVersionId(newDraftId)).hasSize(
+                stepRepository.findByTestCaseVersionId(firstVersionId).size());
+    }
+
+    @Test
+    void oldRejectedRevisionRemainsReviewAndClosed() {
+        UUID[] ids = rejectInitialDraft("H3-006", "Stays Rejected");
+        UUID firstVersionId = ids[1];
+        lifecycleService.createRevision(ids[0], new CreateRevisionRequest(null, "rev"), coordinatorPrincipal);
+        TestCaseVersionEntity rejected = versionRepository.findById(firstVersionId).orElseThrow();
+        assertThat(rejected.getStatus()).isEqualTo(TestCaseVersionStatus.REVIEW);
+        assertThat(rejected.isRevisionClosed()).isTrue();
+        // After createRevision, visibleVersion() points at the new DRAFT, so the rejected version's
+        // REJECT must be asserted against its own review records rather than the detail surface.
+        var rejectedRecords = reviewRecordRepository.findByTestCaseVersionIdOrderByCreatedAtAscIdAsc(firstVersionId);
+        assertThat(rejectedRecords).extracting("action")
+                .containsExactly(ReviewRecordAction.SUBMIT, ReviewRecordAction.REJECT);
+    }
+
+    // -------------------------------------------------------------------------
+    // MEDIUM-02 — Deprecate serialised under the Master PESSIMISTIC_WRITE lock
+    // -------------------------------------------------------------------------
+
+    @Test
+    void lockedLifecycleOperationsSerialiseUnderMasterLock() {
+        // Publish, Deprecate and Create-Revision all take the Master row lock; running the
+        // full sequence confirms the locked deprecate() path functions end-to-end.
+        TestCaseDetailResponse created = createDraft("M2-001", "Master Lock");
+        UUID masterId = created.id();
+        UUID v10 = created.visibleVersion().id();
+        lifecycleService.submitReview(masterId, new LifecycleActionRequest("submit"), coordinatorPrincipal);
+        lifecycleService.publish(masterId, v10, new LifecycleActionRequest("publish"), adminPrincipal);
+
+        lifecycleService.createRevision(masterId, new CreateRevisionRequest(null, "rev"), coordinatorPrincipal);
+        UUID v11 = findLatestDraft(masterId).getId();
+        lifecycleService.submitReview(masterId, new LifecycleActionRequest("submit"), coordinatorPrincipal);
+        lifecycleService.publish(masterId, v11, new LifecycleActionRequest("publish"), adminPrincipal);
+
+        // Deprecate now uses masterRepository.findByIdWithLock — must succeed and flip status.
+        lifecycleService.deprecate(masterId, v11, new LifecycleActionRequest("obsolete"), adminPrincipal);
+        assertThat(versionStatus(masterId, v11)).isEqualTo(TestCaseVersionStatus.DEPRECATED);
+        // The historical v1.0 remains PUBLISHED and untouched.
+        assertThat(versionStatus(masterId, v10)).isEqualTo(TestCaseVersionStatus.PUBLISHED);
+        // Master row stays consistent after the lock is released.
+        assertThat(masterRepository.findById(masterId)).isPresent();
+    }
+
+    // -------------------------------------------------------------------------
+    // HIGH-02 — Real TESTER Revision Contributor edit permissions (no global draft_edit)
+    // -------------------------------------------------------------------------
+
+    private UserEntity saveTester(String username) {
+        String suffix = UUID.randomUUID().toString().substring(0, 8);
+        return userRepository.save(new UserEntity("it_" + username + "_" + suffix, username, "hash"));
+    }
+
+    @Test
+    void testerContributorCanEditAssignedDraft() {
+        TestCaseDetailResponse created = createDraft("H2-001", "Contributor Edit");
+        UUID masterId = created.id();
+
+        UserEntity tester = saveTester("contrib_edit");
+        lifecycleService.addContributor(masterId,
+                new com.company.casehub.testcase.dto.AddContributorRequest(tester.getId()), coordinatorPrincipal);
+
+        UserPrincipal testerPrincipal = new UserPrincipal(tester.getId(), tester.getUsername(), "hash",
+                tester.getDisplayName(), true, false, Set.of("TESTER"),
+                Set.of("test_case:read", "test_case:submit_review"));
+
+        TestCaseDetailResponse updated = draftService.updateDraft(masterId,
+                new UpdateDraftRequest("Edited By Tester", "purpose", "pre", SelectionMode.SINGLE, false,
+                        null, null, null, List.of(new StepRequest("S1", "tester step")), List.of(), List.of(), List.of()),
+                testerPrincipal);
+        assertThat(updated.visibleVersion().caseName()).isEqualTo("Edited By Tester");
+        assertThat(updated.allowedActions().editDraft()).isTrue();
+    }
+
+    @Test
+    void testerContributorCannotEditOtherDraft() {
+        TestCaseDetailResponse created = createDraft("H2-002", "Other Draft");
+        UUID masterId = created.id();
+
+        UserEntity tester = saveTester("contrib_other");
+        UserPrincipal testerPrincipal = new UserPrincipal(tester.getId(), tester.getUsername(), "hash",
+                tester.getDisplayName(), true, false, Set.of("TESTER"), Set.of("test_case:read", "test_case:submit_review"));
+
+        // Tester is NOT a contributor on this master → forbidden.
+        assertThatThrownBy(() -> draftService.updateDraft(masterId,
+                new UpdateDraftRequest("X", "p", "p", SelectionMode.SINGLE, false, null, null, null,
+                        List.of(new StepRequest("S1", "c")), List.of(), List.of(), List.of()), testerPrincipal))
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.TEST_CASE_DRAFT_EDIT_FORBIDDEN);
+    }
+
+    @Test
+    void testerWithoutContributorCannotEditDraft() {
+        TestCaseDetailResponse created = createDraft("H2-003", "No Contributor");
+        UUID masterId = created.id();
+
+        UserEntity tester = saveTester("no_contrib");
+        UserPrincipal testerPrincipal = new UserPrincipal(tester.getId(), tester.getUsername(), "hash",
+                tester.getDisplayName(), true, false, Set.of("TESTER"), Set.of("test_case:read", "test_case:submit_review"));
+
+        assertThatThrownBy(() -> draftService.updateDraft(masterId,
+                new UpdateDraftRequest("X", "p", "p", SelectionMode.SINGLE, false, null, null, null,
+                        List.of(new StepRequest("S1", "c")), List.of(), List.of(), List.of()), testerPrincipal))
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.TEST_CASE_DRAFT_EDIT_FORBIDDEN);
+    }
+
+    @Test
+    void testerContributorCannotEditPublished() {
+        TestCaseDetailResponse created = createDraft("H2-004", "Published Edit");
+        UUID masterId = created.id();
+        UUID versionId = created.visibleVersion().id();
+
+        // Add the tester as a contributor while the version is still an open DRAFT.
+        UserEntity tester = saveTester("contrib_pub");
+        lifecycleService.addContributor(masterId,
+                new com.company.casehub.testcase.dto.AddContributorRequest(tester.getId()), coordinatorPrincipal);
+        UserPrincipal testerPrincipal = new UserPrincipal(tester.getId(), tester.getUsername(), "hash",
+                tester.getDisplayName(), true, false, Set.of("TESTER"), Set.of("test_case:read", "test_case:submit_review"));
+
+        lifecycleService.submitReview(masterId, new LifecycleActionRequest("submit"), coordinatorPrincipal);
+        lifecycleService.publish(masterId, versionId, new LifecycleActionRequest("publish"), adminPrincipal);
+
+        // After publish there is no open DRAFT → editing is impossible (Published Immutable), even
+        // for a contributor who could edit it before publication.
+        assertThatThrownBy(() -> draftService.updateDraft(masterId,
+                new UpdateDraftRequest("X", "p", "p", SelectionMode.SINGLE, false, null, null, null,
+                        List.of(new StepRequest("S1", "c")), List.of(), List.of(), List.of()), testerPrincipal))
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.TEST_CASE_DRAFT_REQUIRED);
+        // And the published detail must NOT surface an edit action for the tester.
+        assertThat(queryService.detail(masterId, testerPrincipal).allowedActions().editDraft()).isFalse();
+    }
+
+    @Test
+    void testerContributorCannotManageContributors() {
+        TestCaseDetailResponse created = createDraft("H2-005", "Manage Contributors");
+        UUID masterId = created.id();
+
+        UserEntity tester = saveTester("contrib_manage");
+        lifecycleService.addContributor(masterId,
+                new com.company.casehub.testcase.dto.AddContributorRequest(tester.getId()), coordinatorPrincipal);
+        UserEntity other = saveTester("contrib_manage_target");
+        UserPrincipal testerPrincipal = new UserPrincipal(tester.getId(), tester.getUsername(), "hash",
+                tester.getDisplayName(), true, false, Set.of("TESTER"), Set.of("test_case:read", "test_case:submit_review"));
+
+        // A contributor is NOT an owner/admin → cannot manage contributors.
+        assertThatThrownBy(() -> lifecycleService.addContributor(masterId,
+                new com.company.casehub.testcase.dto.AddContributorRequest(other.getId()), testerPrincipal))
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.TEST_CASE_LIFECYCLE_FORBIDDEN);
+    }
+
+    // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
 
@@ -513,5 +828,12 @@ class TestCaseLifecycleIT extends AbstractIntegrationTest {
                 .filter(v -> v.getStatus() == TestCaseVersionStatus.DRAFT)
                 .findFirst()
                 .orElseThrow(() -> new IllegalStateException("No DRAFT found for master " + masterId));
+    }
+
+    /** A regular logged-in user (TESTER) with read only — no ownership of the test case. */
+    private UserPrincipal viewerPrincipal() {
+        UserEntity viewer = saveTester("viewer");
+        return new UserPrincipal(viewer.getId(), viewer.getUsername(), "hash", viewer.getDisplayName(), true, false,
+                Set.of("TESTER"), Set.of("test_case:read"));
     }
 }

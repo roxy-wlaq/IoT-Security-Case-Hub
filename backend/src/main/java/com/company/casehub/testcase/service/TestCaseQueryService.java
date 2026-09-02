@@ -178,14 +178,7 @@ public class TestCaseQueryService {
 
     private List<TestCaseVersionEntity> visibleVersions(MasterTestCaseEntity master, UserPrincipal principal) {
         return master.getVersions().stream()
-                .filter(v -> isAdmin(principal)
-                        || v.getStatus() == TestCaseVersionStatus.PUBLISHED
-                        || ((v.getStatus() == TestCaseVersionStatus.DRAFT
-                                || v.getStatus() == TestCaseVersionStatus.REVIEW
-                                || v.getStatus() == TestCaseVersionStatus.DEPRECATED)
-                            && v.getCreatedBy() != null
-                            && (Objects.equals(v.getCreatedBy().getId(), principal.getId())
-                                || accessPolicy.isContributor(v, principal))))
+                .filter(v -> accessPolicy.isVersionVisible(master, v, principal))
                 .sorted(Comparator.comparingInt(TestCaseVersionEntity::getVersionMajor).reversed()
                         .thenComparing(Comparator.comparingInt(TestCaseVersionEntity::getVersionMinor).reversed()))
                 .toList();

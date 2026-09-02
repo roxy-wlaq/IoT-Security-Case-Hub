@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
 import com.company.casehub.auth.security.UserPrincipal;
@@ -41,6 +42,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -69,6 +71,13 @@ class TestCaseLifecycleServiceTest {
     @Mock private TestCaseQueryService queryService;
 
     @InjectMocks private TestCaseLifecycleService service;
+
+    // The resource-level visibility decision is unit-tested in TestCaseAccessPolicyTest; here the
+    // caller is assumed authorized to see the version so the lifecycle-transition assertions run.
+    @BeforeEach
+    void stubVersionVisible() {
+        lenient().when(accessPolicy.isVersionVisible(any(), any(), any())).thenReturn(true);
+    }
 
     // -------------------------------------------------------------------------
     // Submit Review
@@ -319,7 +328,7 @@ class TestCaseLifecycleServiceTest {
         published.setCurrentVersion(true);
         MasterTestCaseEntity master = master(masterId, owner);
         master.setVersions(new ArrayList<>(List.of(published)));
-        when(masterRepository.findById(masterId)).thenReturn(Optional.of(master));
+        when(masterRepository.findByIdWithLock(masterId)).thenReturn(Optional.of(master));
         when(accessPolicy.isAdmin(any())).thenReturn(true);
         when(userRepository.findById(owner.getId())).thenReturn(Optional.of(owner));
 
@@ -339,7 +348,7 @@ class TestCaseLifecycleServiceTest {
         TestCaseVersionEntity draft = draft(owner);
         MasterTestCaseEntity master = master(masterId, owner);
         master.setVersions(new ArrayList<>(List.of(draft)));
-        when(masterRepository.findById(masterId)).thenReturn(Optional.of(master));
+        when(masterRepository.findByIdWithLock(masterId)).thenReturn(Optional.of(master));
         when(accessPolicy.isAdmin(any())).thenReturn(true);
 
         assertThatThrownBy(() -> service.deprecate(masterId, draft.getId(), new LifecycleActionRequest(null),
@@ -422,7 +431,7 @@ class TestCaseLifecycleServiceTest {
         MasterTestCaseEntity master = master(masterId, owner);
         master.setVersions(new ArrayList<>(List.of(draft)));
         when(masterRepository.findByIdWithLock(masterId)).thenReturn(Optional.of(master));
-        when(accessPolicy.isAdmin(any())).thenReturn(true);
+        lenient().when(accessPolicy.isAdmin(any())).thenReturn(true);
 
         assertThatThrownBy(() -> service.createRevision(masterId, new CreateRevisionRequest(draft.getId(), null),
                 principal(owner.getId())))

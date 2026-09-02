@@ -13,7 +13,7 @@ package com.company.casehub.testcase.dto;
  * @param returnReview       REVIEW ∧ revision_closed=false ∧ test_case:review (field avoids TS keyword)
  * @param reject             REVIEW ∧ revision_closed=false ∧ test_case:review
  * @param deprecate          PUBLISHED ∧ test_case:deprecate
- * @param createRevision     current PUBLISHED exists ∧ test_case:draft_create
+ * @param createRevision     test_case:draft_create ∧ (current PUBLISHED exists ∨ a rejected REVIEW version the user may revise)
  * @param manageContributors DRAFT ∧ revision_closed=false ∧ (ADMIN ∨ owner) ∧ test_case:draft_edit
  */
 public record AllowedActions(boolean editDraft, boolean createDraft, boolean submitReview, boolean publish,

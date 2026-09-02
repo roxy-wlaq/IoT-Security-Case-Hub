@@ -126,6 +126,7 @@ class TestCaseQueryServiceTest {
         master.setVersions(List.of(draft));
         when(masterRepository.findById(master.getId())).thenReturn(Optional.of(master));
         when(reviewRecordRepository.findFirstByTestCaseVersionIdOrderByCreatedAtDescIdDesc(any())).thenReturn(Optional.empty());
+        when(accessPolicy.isVersionVisible(any(), any(), any())).thenReturn(true);
         when(accessPolicy.buildAllowedActions(any(), any(), any(), any()))
                 .thenReturn(new AllowedActions(true, true, true, false, false, false, false, false, false));
 
@@ -154,6 +155,7 @@ class TestCaseQueryServiceTest {
         master.setVersions(List.of(draft, published));
         when(masterRepository.findById(master.getId())).thenReturn(Optional.of(master));
         when(reviewRecordRepository.findFirstByTestCaseVersionIdOrderByCreatedAtDescIdDesc(any())).thenReturn(Optional.empty());
+        when(accessPolicy.isVersionVisible(any(), any(), any())).thenReturn(true);
 
         TestCaseDetailResponse response = service.detail(master.getId(), principal(userId, "TEST_COORDINATOR"));
 

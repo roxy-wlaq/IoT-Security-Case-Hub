@@ -75,8 +75,14 @@ public class PostgresTestCaseLibraryQueryRepository implements TestCaseLibraryQu
                                              List<UUID> standardTaskTypeIds) {
         StringBuilder predicates = new StringBuilder("""
                 (:status IS NULL OR v.status = :status)
-                  AND (:admin = TRUE OR v.status = 'PUBLISHED'
-                       OR (v.status = 'DRAFT' AND v.created_by = :principal_id))
+                  AND (:admin = TRUE
+                       OR v.status = 'PUBLISHED'
+                       OR v.status = 'DEPRECATED'
+                       OR ((v.status = 'DRAFT' OR v.status = 'REVIEW')
+                           AND (v.created_by = :principal_id
+                                OR EXISTS (SELECT 1 FROM casehub.revision_contributors rc
+                                           WHERE rc.test_case_version_id = v.id AND rc.user_id = :principal_id)))
+                  )
                   AND (
                       :q_pattern IS NULL
                       OR m.case_code ILIKE :q_pattern

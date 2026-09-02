@@ -109,7 +109,73 @@ function rejectedDetail(): TestCaseDetail {
     draftVersion: null,
     visibleVersion: reviewVersion,
     versions: [{ id: 'v-review', versionLabel: 'v1.0', versionMajor: 1, versionMinor: 0, status: 'REVIEW', isCurrentVersion: false, changeReason: null, createdBy: 'owner-1', createdAt: new Date().toISOString() }],
-    allowedActions: { editDraft: false, createDraft: false, submitReview: false, publish: true, returnReview: true, reject: true, deprecate: false, createRevision: false, manageContributors: false },
+    // A REJECTED version (REVIEW + revisionClosed + latestReviewAction=REJECT) is read-only:
+    // every lifecycle action is hidden. Create-Revision is also hidden here because the viewer
+    // has no test_case:draft_create permission (the backend surfaces it only for revisable rejected
+    // versions and only when that permission is present — HIGH-03).
+    allowedActions: { editDraft: false, createDraft: false, submitReview: false, publish: false, returnReview: false, reject: false, deprecate: false, createRevision: false, manageContributors: false },
+  };
+}
+
+function deprecatedDetail(): TestCaseDetail {
+  const deprecatedVersion: TestCaseVersion = { ...versionBase, id: 'v-deprecated', status: 'DEPRECATED', revisionClosed: true, latestReviewAction: 'DEPRECATE' };
+  return {
+    id: 'master-1',
+    caseCode: 'BLE-001',
+    categoryId: 'cat-1',
+    categoryName: 'Category',
+    createdBy: 'owner-1',
+    enabled: true,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    tags: [],
+    currentVersion: deprecatedVersion,
+    draftVersion: null,
+    visibleVersion: deprecatedVersion,
+    versions: [{ id: 'v-deprecated', versionLabel: 'v1.0', versionMajor: 1, versionMinor: 0, status: 'DEPRECATED', isCurrentVersion: true, changeReason: null, createdBy: 'owner-1', createdAt: new Date().toISOString(), publishedAt: new Date().toISOString() }],
+    allowedActions: { editDraft: false, createDraft: false, submitReview: false, publish: false, returnReview: false, reject: false, deprecate: false, createRevision: false, manageContributors: false },
+  };
+}
+
+function publishedWithRevisionDetail(): TestCaseDetail {
+  const publishedVersion: TestCaseVersion = { ...versionBase, id: 'v-published', status: 'PUBLISHED', isCurrentVersion: true, revisionClosed: true, latestReviewAction: 'PUBLISH', publishedAt: new Date().toISOString() };
+  return {
+    id: 'master-1',
+    caseCode: 'BLE-001',
+    categoryId: 'cat-1',
+    categoryName: 'Category',
+    createdBy: 'owner-1',
+    enabled: true,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    tags: [],
+    currentVersion: publishedVersion,
+    draftVersion: null,
+    visibleVersion: publishedVersion,
+    versions: [{ id: 'v-published', versionLabel: 'v1.0', versionMajor: 1, versionMinor: 0, status: 'PUBLISHED', isCurrentVersion: true, changeReason: null, createdBy: 'owner-1', createdAt: new Date().toISOString(), publishedAt: new Date().toISOString() }],
+    allowedActions: { editDraft: false, createDraft: false, submitReview: false, publish: false, returnReview: false, reject: false, deprecate: false, createRevision: true, manageContributors: false },
+  };
+}
+
+// A DRAFT whose allowedActions.editDraft is true — exactly what the backend returns for a
+// TESTER revision-contributor (HIGH-02): resource membership grants the temporary edit right even
+// without the global test_case:draft_edit permission. The UI renders purely from allowedActions.
+function testerContributorDraftDetail(): TestCaseDetail {
+  return {
+    id: 'master-1',
+    caseCode: 'BLE-001',
+    categoryId: 'cat-1',
+    categoryName: 'Category',
+    createdBy: 'owner-1',
+    enabled: true,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    tags: [],
+    currentVersion: null,
+    draftVersion: { ...versionBase, id: 'v-tester-draft', createdBy: 'tester-1' },
+    visibleVersion: { ...versionBase, id: 'v-tester-draft', createdBy: 'tester-1' },
+    versions: [{ id: 'v-tester-draft', versionLabel: 'v1.0', versionMajor: 1, versionMinor: 0, status: 'DRAFT', isCurrentVersion: false, changeReason: null, createdBy: 'tester-1', createdAt: new Date().toISOString() }],
+    allowedActions: { editDraft: true, createDraft: false, submitReview: true, publish: false, returnReview: false, reject: false, deprecate: false, createRevision: false, manageContributors: false },
   };
 }
 
@@ -164,7 +230,53 @@ describe('TestCaseDetailPage — lifecycle', () => {
     renderPage(rejectedDetail());
 
     expect(await screen.findByText('已驳回')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: (name) => name.replace(/\s/g, '') === '驳回' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '提交评审' })).not.toBeInTheDocument();
+  });
+
+  it('rejected version is read-only — hides every lifecycle action', async () => {
+    renderPage(rejectedDetail());
+
+    await screen.findByText('已驳回');
+    // No edit / submit / publish / return / reject / deprecate / create-revision for a closed REJECTED version.
+    expect(screen.queryByRole('button', { name: '编辑 Draft' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '提交评审' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '发布' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '退回修改' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '驳回' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '弃用' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '创建修订' })).not.toBeInTheDocument();
+  });
+
+  it('deprecated version is read-only and never masqueraded as published', async () => {
+    renderPage(deprecatedDetail());
+
+    await screen.findByText('BLE-001');
+    // Status renders as DEPRECATED (warning) in both the detail card and the version-history table —
+    // it is never masqueraded as a publishable current version.
+    expect(screen.getAllByText('DEPRECATED').length).toBeGreaterThan(0);
+    expect(screen.queryByText('已驳回')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '发布' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '弃用' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '编辑 Draft' })).not.toBeInTheDocument();
+  });
+
+  it('create revision is visible on a published current version', async () => {
+    renderPage(publishedWithRevisionDetail());
+
+    await screen.findByText('BLE-001');
+    expect(screen.getByRole('button', { name: '创建修订' })).toBeInTheDocument();
+    // Publish is not offered for an already-published version.
+    expect(screen.queryByRole('button', { name: '发布' })).not.toBeInTheDocument();
+  });
+
+  it('tester revision-contributor can edit the assigned draft when allowedActions.editDraft is true', async () => {
+    renderPage(testerContributorDraftDetail());
+
+    await screen.findByText('BLE-001');
+    // The backend grants editDraft to a TESTER contributor without the global draft_edit permission,
+    // and the UI renders the button straight from allowedActions.
+    expect(screen.getByRole('button', { name: '编辑 Draft' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '提交评审' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '发布' })).not.toBeInTheDocument();
   });
 });

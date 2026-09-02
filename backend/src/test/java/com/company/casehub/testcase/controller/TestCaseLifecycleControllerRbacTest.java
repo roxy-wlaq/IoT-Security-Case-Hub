@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -18,6 +19,7 @@ import com.company.casehub.testcase.dto.AddContributorRequest;
 import com.company.casehub.testcase.dto.CreateRevisionRequest;
 import com.company.casehub.testcase.dto.LifecycleActionRequest;
 import com.company.casehub.testcase.dto.TestCaseDetailResponse;
+import com.company.casehub.testcase.service.TestCaseAccessPolicy;
 import com.company.casehub.testcase.service.TestCaseLifecycleService;
 import java.util.List;
 import java.util.Set;
@@ -45,6 +47,7 @@ class TestCaseLifecycleControllerRbacTest {
     @Autowired private MockMvc mockMvc;
 
     @MockBean private TestCaseLifecycleService lifecycleService;
+    @MockBean(name = "testCaseAccessPolicy") private TestCaseAccessPolicy accessPolicy;
 
     private static final UUID MASTER_ID = UUID.fromString("00000000-0000-0000-0000-000000000001");
     private static final UUID VERSION_ID = UUID.fromString("00000000-0000-0000-0000-000000000002");
@@ -56,12 +59,31 @@ class TestCaseLifecycleControllerRbacTest {
 
     @Test
     void testerCannotSubmitReview() throws Exception {
+        // A plain TESTER (no submit_review authority, no contributor membership) hits the
+        // permission-code gate (false) and the resource-level gate canEditDraftById (false).
         mockMvc.perform(post("/api/v1/test-cases/{masterId}/draft/submit-review", MASTER_ID)
-                        .with(user("tester")).with(csrf())
+                        .with(user(tester())).with(csrf())
                         .contentType("application/json")
                         .content("{\"comment\":\"ok\"}"))
                 .andExpect(status().isForbidden());
         verifyNoInteractions(lifecycleService);
+    }
+
+    @Test
+    void testerContributorCanSubmitReview() throws Exception {
+        // HIGH-02: a TESTER contributor with no global test_case:submit_review authority may
+        // still submit the assigned draft because the resource-level gate (canEditDraftById)
+        // resolves to true for them.
+        when(accessPolicy.canEditDraftById(any(), any())).thenReturn(true);
+        doReturn(detailResponse()).when(lifecycleService)
+                .submitReview(eq(MASTER_ID), any(), any());
+
+        mockMvc.perform(post("/api/v1/test-cases/{masterId}/draft/submit-review", MASTER_ID)
+                        .with(user(testerContributor())).with(csrf())
+                        .contentType("application/json")
+                        .content("{\"comment\":\"tester submit\"}"))
+                .andExpect(status().isOk());
+        verify(lifecycleService).submitReview(eq(MASTER_ID), any(), any());
     }
 
     @Test
@@ -228,6 +250,18 @@ class TestCaseLifecycleControllerRbacTest {
     private static UserPrincipal coordinator() {
         return new UserPrincipal(UUID.randomUUID(), "coord", "hash", "Coordinator", true, false,
                 Set.of("TEST_COORDINATOR"), Set.of("test_case:submit_review", "test_case:draft_create", "test_case:read"));
+    }
+
+    /** A plain TESTER with only read — no lifecycle authorities, no contributor membership. */
+    private static UserPrincipal tester() {
+        return new UserPrincipal(UUID.randomUUID(), "tester", "hash", "Tester", true, false,
+                Set.of("TESTER"), Set.of("test_case:read"));
+    }
+
+    /** A TESTER contributor: no global draft_edit/submit_review, but added to a Draft. */
+    private static UserPrincipal testerContributor() {
+        return new UserPrincipal(UUID.randomUUID(), "tester", "hash", "Tester", true, false,
+                Set.of("TESTER"), Set.of("test_case:read", "test_case:submit_review"));
     }
 
     private static UserPrincipal admin() {

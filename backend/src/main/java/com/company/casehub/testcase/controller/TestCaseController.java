@@ -67,7 +67,7 @@ public class TestCaseController {
     }
 
     @PutMapping("/{masterId}/draft")
-    @PreAuthorize("hasAuthority('test_case:draft_edit')")
+    @PreAuthorize("hasAuthority('test_case:draft_edit') or @testCaseAccessPolicy.canEditDraftById(#masterId, principal)")
     public TestCaseDetailResponse updateDraft(@PathVariable UUID masterId, @Valid @RequestBody UpdateDraftRequest request,
                                               @AuthenticationPrincipal UserPrincipal principal) {
         return draftService.updateDraft(masterId, request, principal);

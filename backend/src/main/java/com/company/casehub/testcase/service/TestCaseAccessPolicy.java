@@ -5,8 +5,11 @@ import com.company.casehub.testcase.dto.AllowedActions;
 import com.company.casehub.testcase.entity.MasterTestCaseEntity;
 import com.company.casehub.testcase.entity.TestCaseVersionEntity;
 import com.company.casehub.testcase.entity.TestCaseVersionStatus;
+import com.company.casehub.testcase.repository.MasterTestCaseRepository;
 import com.company.casehub.testcase.repository.RevisionContributorRepository;
+import java.util.Comparator;
 import java.util.Objects;
+import java.util.UUID;
 import org.springframework.stereotype.Component;
 
 /**
@@ -26,9 +29,11 @@ import org.springframework.stereotype.Component;
 public class TestCaseAccessPolicy {
 
     private final RevisionContributorRepository contributorRepository;
+    private final MasterTestCaseRepository masterRepository;
 
-    public TestCaseAccessPolicy(RevisionContributorRepository contributorRepository) {
+    public TestCaseAccessPolicy(RevisionContributorRepository contributorRepository, MasterTestCaseRepository masterRepository) {
         this.contributorRepository = contributorRepository;
+        this.masterRepository = masterRepository;
     }
 
     public boolean isAdmin(UserPrincipal principal) {
@@ -61,6 +66,15 @@ public class TestCaseAccessPolicy {
     /**
      * Builds the 9-field {@link AllowedActions} for a detail response.
      *
+     * <p>Edit / Submit are driven by resource membership (ADMIN, owner or
+     * contributor) and the version status — NOT by the global
+     * {@code test_case:draft_edit} / {@code test_case:submit_review} permission
+     * codes. Those permission codes stay as the controller-level first gate, but
+     * a contributor who lacks the global permission is still granted temporary
+     * edit/submit on the specific Draft they were added to (Phase 7 Review Fix
+     * HIGH-02). A Draft owner / contributor relationship is therefore a
+     * sufficient grant for edit & submit.
+     *
      * @param master           the master aggregate (with versions hydrated)
      * @param draft            the latest visible DRAFT (may be null)
      * @param visible          the version currently surfaced to the user (may be null)
@@ -72,22 +86,21 @@ public class TestCaseAccessPolicy {
                 .filter(v -> v.isCurrentVersion() && v.getStatus() == TestCaseVersionStatus.PUBLISHED)
                 .findFirst().orElse(null);
         TestCaseVersionEntity reviewable = latestReviewFor(master, principal);
-        boolean hasDraftEdit = principal.getPermissions().contains("test_case:draft_edit");
         boolean hasDraftCreate = principal.getPermissions().contains("test_case:draft_create");
-        boolean hasSubmit = principal.getPermissions().contains("test_case:submit_review");
         boolean hasReview = principal.getPermissions().contains("test_case:review");
         boolean hasPublish = principal.getPermissions().contains("test_case:publish");
         boolean hasDeprecate = principal.getPermissions().contains("test_case:deprecate");
 
-        boolean editableDraft = draft != null && draft.getStatus() == TestCaseVersionStatus.DRAFT
-                && !draft.isRevisionClosed() && hasDraftEdit && canEditOrSubmit(draft, principal);
-        boolean submittable = draft != null && draft.getStatus() == TestCaseVersionStatus.DRAFT
-                && !draft.isRevisionClosed() && hasSubmit && canEditOrSubmit(draft, principal);
+        boolean openDraft = draft != null && draft.getStatus() == TestCaseVersionStatus.DRAFT && !draft.isRevisionClosed();
+        boolean editableDraft = openDraft && canEditOrSubmit(draft, principal);
+        boolean submittable = openDraft && canEditOrSubmit(draft, principal);
         boolean reviewOpen = reviewable != null && reviewable.getStatus() == TestCaseVersionStatus.REVIEW
                 && !reviewable.isRevisionClosed();
-        boolean canManage = draft != null && draft.getStatus() == TestCaseVersionStatus.DRAFT
-                && !draft.isRevisionClosed() && hasDraftEdit && canManageContributors(draft, principal);
+        boolean canManage = openDraft && canManageContributors(draft, principal);
         boolean deprecateVisible = visible != null && visible.getStatus() == TestCaseVersionStatus.PUBLISHED && hasDeprecate;
+        // Create Revision is available when there is a current PUBLISHED version, or a
+        // rejected (REVIEW + revision_closed) version the user may revise (HIGH-03).
+        boolean createRevisionVisible = hasDraftCreate && (currentPublished != null || hasRevisableRejected(master, principal));
 
         return new AllowedActions(
                 editableDraft,
@@ -97,15 +110,57 @@ public class TestCaseAccessPolicy {
                 reviewOpen && hasReview,
                 reviewOpen && hasReview,
                 deprecateVisible,
-                currentPublished != null && hasDraftCreate,
+                createRevisionVisible,
                 canManage
         );
+    }
+
+    /**
+     * Unifies version visibility across the whole module (HIGH-01 / MEDIUM-01).
+     * All logged-in users may read PUBLISHED and DEPRECATED versions; DRAFT and
+     * REVIEW versions are visible only to ADMIN, the version owner or an explicit
+     * revision contributor. A rejected version (REVIEW + revision_closed) is
+     * therefore readable by its owner/contributor, which is what lets them
+     * create a new revision from it (HIGH-03).
+     */
+    public boolean isVersionVisible(MasterTestCaseEntity master, TestCaseVersionEntity version, UserPrincipal principal) {
+        if (isAdmin(principal)) {
+            return true;
+        }
+        return switch (version.getStatus()) {
+            case PUBLISHED, DEPRECATED -> true;
+            case DRAFT, REVIEW -> version.getCreatedBy() != null
+                    && (Objects.equals(version.getCreatedBy().getId(), principal.getId()) || isContributor(version, principal));
+        };
+    }
+
+    /**
+     * Controller-level pre-authorization helper: true when the principal can edit
+     * or submit the latest open DRAFT of the given master (owner / contributor /
+     * ADMIN). Lets a contributor's temporary edit right satisfy the
+     * {@code updateDraft} / {@code submitReview} gate without the global
+     * {@code test_case:draft_edit} / {@code test_case:submit_review} permission (HIGH-02).
+     */
+    public boolean canEditDraftById(UUID masterId, UserPrincipal principal) {
+        return masterRepository.findById(masterId)
+                .flatMap(master -> master.getVersions().stream()
+                        .filter(v -> v.getStatus() == TestCaseVersionStatus.DRAFT && !v.isRevisionClosed())
+                        .max(Comparator.comparingInt(TestCaseVersionEntity::getVersionMajor)
+                                .thenComparingInt(TestCaseVersionEntity::getVersionMinor)))
+                .map(draft -> canEditOrSubmit(draft, principal))
+                .orElse(false);
+    }
+
+    private boolean hasRevisableRejected(MasterTestCaseEntity master, UserPrincipal principal) {
+        return master.getVersions().stream()
+                .anyMatch(v -> v.getStatus() == TestCaseVersionStatus.REVIEW && v.isRevisionClosed()
+                        && (isAdmin(principal) || isOwner(v, principal) || isContributor(v, principal)));
     }
 
     private TestCaseVersionEntity latestReviewFor(MasterTestCaseEntity master, UserPrincipal principal) {
         return master.getVersions().stream()
                 .filter(v -> v.getStatus() == TestCaseVersionStatus.REVIEW)
-                .filter(v -> isAdmin(principal))
+                .filter(v -> isAdmin(principal) || isOwner(v, principal) || isContributor(v, principal))
                 .max((a, b) -> Integer.compare(a.getVersionMajor() * 10000 + a.getVersionMinor(),
                         b.getVersionMajor() * 10000 + b.getVersionMinor()))
                 .orElse(null);

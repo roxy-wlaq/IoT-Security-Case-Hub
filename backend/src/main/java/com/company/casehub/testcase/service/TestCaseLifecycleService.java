@@ -179,7 +179,8 @@ public class TestCaseLifecycleService {
 
     @Transactional
     public TestCaseDetailResponse deprecate(UUID masterId, UUID versionId, LifecycleActionRequest request, UserPrincipal principal) {
-        MasterTestCaseEntity master = requireMaster(masterId);
+        MasterTestCaseEntity master = masterRepository.findByIdWithLock(masterId)
+                .orElseThrow(() -> notFound(masterId));
         TestCaseVersionEntity target = requireVisibleVersion(master, versionId, principal);
         if (!accessPolicy.isAdmin(principal)) {
             throw new ForbiddenOperationException(ErrorCode.TEST_CASE_LIFECYCLE_FORBIDDEN,
@@ -203,9 +204,10 @@ public class TestCaseLifecycleService {
         MasterTestCaseEntity master = masterRepository.findByIdWithLock(masterId)
                 .orElseThrow(() -> notFound(masterId));
         TestCaseVersionEntity source = resolveRevisionSource(master, request, principal);
-        if (source.getStatus() != TestCaseVersionStatus.PUBLISHED) {
+        if (source.getStatus() != TestCaseVersionStatus.PUBLISHED
+                && !(source.getStatus() == TestCaseVersionStatus.REVIEW && source.isRevisionClosed())) {
             throw new BusinessRuleException(ErrorCode.TEST_CASE_REVISION_SOURCE_INVALID,
-                    "A revision can only be created from a PUBLISHED version.");
+                    "A revision can only be created from a PUBLISHED version or a rejected (closed) REVIEW version.");
         }
         int major = source.getVersionMajor();
         int nextMinor = master.getVersions().stream()
@@ -318,12 +320,7 @@ public class TestCaseLifecycleService {
     }
 
     private boolean isVisible(MasterTestCaseEntity master, TestCaseVersionEntity version, UserPrincipal principal) {
-        if (accessPolicy.isAdmin(principal)) {
-            return true;
-        }
-        return version.getStatus() == TestCaseVersionStatus.PUBLISHED
-                || (version.getStatus() == TestCaseVersionStatus.DRAFT
-                && version.getCreatedBy() != null && Objects.equals(version.getCreatedBy().getId(), principal.getId()));
+        return accessPolicy.isVersionVisible(master, version, principal);
     }
 
     private Optional<TestCaseVersionEntity> latestVisibleDraft(UUID masterId, UserPrincipal principal) {
@@ -385,13 +382,27 @@ public class TestCaseLifecycleService {
 
     private TestCaseVersionEntity resolveRevisionSource(MasterTestCaseEntity master, CreateRevisionRequest request, UserPrincipal principal) {
         if (request.sourceVersionId() != null) {
-            return requireVisibleVersion(master, request.sourceVersionId(), principal);
+            TestCaseVersionEntity source = requireVisibleVersion(master, request.sourceVersionId(), principal);
+            if (source.getStatus() == TestCaseVersionStatus.PUBLISHED) {
+                return source;
+            }
+            // HIGH-03: a rejected revision (REVIEW + revision_closed) may be revised into a new Draft.
+            if (source.getStatus() == TestCaseVersionStatus.REVIEW && source.isRevisionClosed()) {
+                return source;
+            }
+            throw new BusinessRuleException(ErrorCode.TEST_CASE_REVISION_SOURCE_INVALID,
+                    "A revision can only be created from a PUBLISHED version or a rejected (closed) REVIEW version.");
         }
+        // Default source: the current PUBLISHED version, otherwise the latest rejected (closed) REVIEW version.
         return master.getVersions().stream()
                 .filter(v -> v.isCurrentVersion() && v.getStatus() == TestCaseVersionStatus.PUBLISHED)
                 .findFirst()
-                .orElseThrow(() -> new BusinessRuleException(ErrorCode.TEST_CASE_REVISION_SOURCE_INVALID,
-                        "No current PUBLISHED version to revise."));
+                .orElseGet(() -> master.getVersions().stream()
+                        .filter(v -> v.getStatus() == TestCaseVersionStatus.REVIEW && v.isRevisionClosed())
+                        .max(Comparator.comparingInt(TestCaseVersionEntity::getVersionMajor)
+                                .thenComparingInt(TestCaseVersionEntity::getVersionMinor))
+                        .orElseThrow(() -> new BusinessRuleException(ErrorCode.TEST_CASE_REVISION_SOURCE_INVALID,
+                                "No PUBLISHED or rejected version to revise.")));
     }
 
     private void record(TestCaseVersionEntity version, ReviewRecordAction action, UserPrincipal principal, String comment) {
