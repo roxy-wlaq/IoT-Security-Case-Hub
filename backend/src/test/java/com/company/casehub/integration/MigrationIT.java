@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.company.casehub.user.repository.PermissionRepository;
 import com.company.casehub.user.repository.RoleRepository;
 import com.company.casehub.user.repository.UserRepository;
+import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -47,12 +48,52 @@ class MigrationIT extends AbstractIntegrationTest {
 
         Integer rpCount = jdbcTemplate.queryForObject(
                 "SELECT count(*) FROM casehub.role_permissions", Integer.class);
-        // ADMIN(54) + TEST_COORDINATOR(31) + TESTER(21)
-        assertThat(rpCount).isEqualTo(106);
+        // ADMIN(54) + TEST_COORDINATOR(36 = 31 from V002 + 5 from V005) + TESTER(21)
+        assertThat(rpCount).isEqualTo(111);
 
         assertThat(roleRepository.findByCode("ADMIN")).isPresent();
         assertThat(roleRepository.findByCode("TEST_COORDINATOR")).isPresent();
         assertThat(roleRepository.findByCode("TESTER")).isPresent();
+    }
+
+    @Test
+    void coordinatorHasReferenceAndCapabilityReadPermissions() {
+        List<String> codes = List.of("standard:read", "category:read", "tag:read", "tool:read", "capability:read");
+
+        Integer granted = jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM casehub.role_permissions rp "
+                        + "JOIN casehub.roles r ON r.id = rp.role_id "
+                        + "JOIN casehub.permissions p ON p.id = rp.permission_id "
+                        + "WHERE r.code = 'TEST_COORDINATOR' AND p.code = ANY (?)",
+                Integer.class,
+                (Object) codes.toArray(new String[0]));
+        assertThat(granted).isEqualTo(codes.size());
+
+        // V005 is additive: it introduces no coordinator manage permission.
+        Integer manageGrants = jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM casehub.role_permissions rp "
+                        + "JOIN casehub.roles r ON r.id = rp.role_id "
+                        + "JOIN casehub.permissions p ON p.id = rp.permission_id "
+                        + "WHERE r.code = 'TEST_COORDINATOR' AND p.code IN ("
+                        + "'standard:manage','category:manage','tag:manage','tool:manage',"
+                        + "'capability:manage_library')",
+                Integer.class);
+        assertThat(manageGrants).isZero();
+    }
+
+    @Test
+    void adminAndTesterPermissionSetsAreUnchangedByV005() {
+        Integer adminCount = jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM casehub.role_permissions rp JOIN casehub.roles r ON r.id = rp.role_id "
+                        + "WHERE r.code = 'ADMIN'",
+                Integer.class);
+        Integer testerCount = jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM casehub.role_permissions rp JOIN casehub.roles r ON r.id = rp.role_id "
+                        + "WHERE r.code = 'TESTER'",
+                Integer.class);
+
+        assertThat(adminCount).isEqualTo(54);
+        assertThat(testerCount).isEqualTo(21);
     }
 
     @Test

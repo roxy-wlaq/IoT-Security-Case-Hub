@@ -72,7 +72,14 @@ export interface DictionaryListParams {
   enabled?: boolean;
 }
 
-/** 标准任务类型列表额外支持按 type 过滤 */
-export interface StandardListParams extends DictionaryListParams {
+/**
+ * 标准任务类型列表参数。
+ *
+ * 冻结契约使用 `q`（而非 `search`）：GET /api/v1/standard-task-types?q=&enabled=&type=
+ * 只有 standard 用 `q`；category / tag / tool 仍用 `search`（见 DictionaryListParams）。
+ */
+export interface StandardListParams {
+  q?: string;
+  enabled?: boolean;
   type?: StandardType;
 }

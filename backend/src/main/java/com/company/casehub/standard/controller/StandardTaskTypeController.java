@@ -37,10 +37,10 @@ public class StandardTaskTypeController {
 
     @GetMapping
     public List<StandardTaskTypeResponse> list(
-            @RequestParam(name = "search", required = false) String search,
+            @RequestParam(name = "q", required = false) String q,
             @RequestParam(name = "enabled", required = false) Boolean enabled,
             @RequestParam(name = "type", required = false) String type) {
-        return service.list(search, enabled, type);
+        return service.list(q, enabled, type);
     }
 
     @PostMapping

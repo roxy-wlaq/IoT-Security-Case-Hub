@@ -12,9 +12,16 @@
 --
 -- Rationale (Spec Owner requirement, Phase 4):
 --   * Tag  — the owner explicitly requires "code / name uniqueness": a tag must be
---            addressable by a stable machine code (used by later import/export and
---            generation-rule matching) AND by a human name; both must be unique
---            case-insensitively.
+--            addressable by a stable machine code AND by a human name; both must be
+--            unique case-insensitively. `code` is the stable identifier used for
+--            import / export and for referencing a tag from outside the platform,
+--            so `name` stays a display label that may be edited or translated
+--            without breaking existing references.
+--            Official Tag purposes: Search / Filter / Learning / Stable Reference +
+--            Import-Export. A Tag is NOT a generation-rule input — generation
+--            conditions live in GenerationRule and evaluate project capabilities,
+--            never tags (Implementation Plan Phase 11). The earlier wording
+--            "generation-rule matching" was wrong and has been removed.
 --   * Tool — the owner explicitly requires the tool dictionary to expose at least
 --            `id, code, name, description, enabled`. `code` is the stable key used by
 --            test-case tooling references, while `name` stays a display label that may
@@ -76,6 +83,10 @@ CREATE INDEX IF NOT EXISTS ix_categories_enabled ON casehub.categories (enabled)
 
 -- =============================================================================
 -- tags (§9.2 + user-mandated `code`)
+-- -----------------------------------------------------------------------------
+-- Purpose: Search / Filter / Learning / Stable Reference / Import-Export.
+-- A tag is a label attached to library content; it is explicitly NOT a
+-- generation-rule input (see the deviation note at the top of this file).
 -- =============================================================================
 CREATE TABLE IF NOT EXISTS casehub.tags (
     id          UUID        NOT NULL,

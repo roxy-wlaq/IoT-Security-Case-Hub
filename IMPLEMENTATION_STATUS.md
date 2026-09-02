@@ -90,13 +90,14 @@
 | 项目 | 状态 | 说明 |
 |------|------|------|
 | V003__reference_catalog.sql | ✅ | standard_task_types / categories（两级 CHECK 约束）/ tags / tools；tags/tools 增加用户指定的 `code` 列（相对 Schema V1.0 §9 的有意扩展，已在 SQL 注释声明）；pg_trgm GIN 搜索索引 |
-| Standard / Task Type | ✅ | GET/POST/PUT `/api/v1/standard-task-types`（search/enabled/type 过滤）；type ∈ {STANDARD, TASK_TYPE}；code 大小写不敏感唯一 |
-| Category | ✅ | GET `/api/v1/categories/tree`、POST/PUT；level 服务端由 parentId 推导；两级树（Level 2 下禁止 Level 3）；拒绝 self parent / 非法 parent / 后代作 parent（含祖先链遍历） |
-| Tag | ✅ | GET/POST/PUT `/api/v1/tags`（search/enabled）；code + name 双唯一（大小写不敏感） |
+| Standard / Task Type | ✅ | GET/POST/PUT `/api/v1/standard-task-types?q=&enabled=&type=`（**冻结契约为 `q`，非 `search`**）；type ∈ {STANDARD, TASK_TYPE}；code 大小写不敏感唯一 |
+| Category | ✅ | GET `/api/v1/categories/tree?search=&enabled=`、POST/PUT；level 服务端由 parentId 推导；两级树（Level 2 下禁止 Level 3）；拒绝 self parent / 非法 parent / 后代作 parent（含祖先链遍历） |
+| Tag | ✅ | GET/POST/PUT `/api/v1/tags?search=&enabled=`；code + name 双唯一（大小写不敏感）。Tag 用途 = Search / Filter / Learning / Stable Reference / Import-Export，**不是 Generation Rule Input** |
 | Tool | ✅ | GET 列表+详情、POST/PUT `/api/v1/tools`；仅元数据 CRUD，附件上传留待后续 Storage Phase |
 | RBAC | ✅ | 读：任意登录用户；写：`@PreAuthorize hasAuthority('{standard,category,tag,tool}:manage')`（权限码沿用 V002 seed，未新造） |
 | Frontend | ✅ | `/admin/standards` `/admin/categories`（Tree/TreeTable 两级树）/`/admin/tags` `/tools`；Table + Modal Form（React Hook Form + Zod）；TanStack Query；PermissionGuard 控制管理按钮 |
-| Tests | ✅ | 4 组 Service 单测（含 Category level1/2 成功、level3/self/invalid/后代 parent 拒绝）+ 4 组 @WebMvcTest RBAC 测试；`mvn clean test` 111 tests 0 failures |
+| Tests | ✅ | 4 组 Service 单测（含 Category level1/2 成功、level3/self/invalid/后代 parent 拒绝）+ 4 组 @WebMvcTest RBAC 测试；Code Review Round 后 `mvn clean test` **116 tests 0 failures** |
+| V005（Review Round 追加） | ✅ | `V005__fix_coordinator_reference_read_permissions.sql`：TEST_COORDINATOR 补 5 个 read 权限（幂等、不动 ADMIN/TESTER） |
 | 前端既有 16 个 TS 错误 | ✅ | 本轮全部修复（Standard type 字面量化、Category enabled 类型、TagPage antd Tag 标识符撞车改 `Tag as AntdTag`）；typecheck 0 error |
 
 ### Phase 5 — Capability Library ✅ Completed（2026-09-02）
@@ -263,9 +264,51 @@
 
 ---
 
+## Phase 4/5 Code Review Round（2026-09-02）
+
+范围：**只修复 Phase 4/5 Review 发现**。禁止开始 Phase 6 / Phase 7 / MasterTestCase / TestCaseVersion —— 本轮严守边界，未新增任何 Phase 6+ 代码。
+
+| # | 严重度 | 问题 | 修复 | 状态 |
+|---|--------|------|------|------|
+| 1 | **HIGH** | TEST_COORDINATOR 缺少 reference / capability read 权限（V002 未授予），导致权限驱动 UI（RouteGuard / PermissionGuard / 导航过滤）对协调员隐藏字典与能力库页面 | 新增 **`V005__fix_coordinator_reference_read_permissions.sql`**：为 TEST_COORDINATOR 追加 `standard:read` / `category:read` / `tag:read` / `tool:read` / `capability:read`；`ON CONFLICT (role_id, permission_id) DO NOTHING` 保证幂等；仅追加，**不改 ADMIN / TESTER**（ADMIN 仍 54、TESTER 仍 21）。**未修改冻结的 V002** | ✅ |
+| 2 | **MEDIUM** | 能力库前端路由写成 `/capabilities` | 统一改为 **`/admin/capabilities`**：`navigation.ts` 条目 + `router.tsx` 页面映射同步修正。后端 API `/api/v1/capabilities/*` **未改动**（冻结） | ✅ |
+| 3 | **MEDIUM** | Standard 列表查询参数用了 `search`，与冻结契约不符 | 统一到冻结契约的 **`q`**：`StandardTaskTypeController`（`@RequestParam("q")`）、`StandardTaskTypeService.list(String q, ...)` 及 `querySpec(q, ...)`、前端 `StandardListParams{ q }`、standardApi 注释、StandardPage 过滤状态。仅 standard 改用 `q`；category / tag / tool 仍用 `search`（其契约如此）。**不同时兼容 `search`** | ✅ |
+| 4 | **LOW** | V003 注释把 Tag 的 `code` 描述为用于 "generation-rule matching"，语义错误 | 保留 `tags.code` / `tools.code` 字段，仅修正注释：Tag 正式用途 = **Search / Filter / Learning / Stable Reference / Import-Export**，并显式声明 **Tag 不是 Generation Rule Input**（生成条件由 GenerationRule 依据 project capability 判定，Phase 11） | ✅ |
+
+### 修复 Commit
+
+| 内容 | Commit |
+|------|--------|
+| HIGH×1 / MEDIUM×2 / LOW×1 全部修复 | `9d1fe66` — `fix(phase4/5): resolve code review findings (HIGH x1, MEDIUM x2, LOW x1)` |
+
+### 新增/修改测试
+
+| 测试 | 覆盖 | 是否真实运行 |
+|------|------|--------------|
+| `backend/.../migration/V005CoordinatorReadPermissionsTest`（新，4 项） | V005 授予的正是那 5 个 read 权限且不含 manage；仅作用于 TEST_COORDINATOR；`ON CONFLICT DO NOTHING` 幂等、无 DELETE/UPDATE/DROP；V001–V004 仍在、V006 未被占用 | ✅ 已运行通过 |
+| `backend/.../standard/controller/StandardTaskTypeControllerRbacTest`（改 + 新增 1） | `readPassesQueryFiltersToService` 改用 `?q=`；新增 `legacySearchParameterIsNotBound`：传 `search` 时服务收到 `null`，防止旧参数名被静默兼容 | ✅ 已运行通过 |
+| `backend/.../integration/MigrationIT`（改） | 角色权限总数 106 → **111**（ADMIN 54 + COORDINATOR 36 + TESTER 21）；新增 `coordinatorHasReferenceAndCapabilityReadPermissions`（5 个 read 全在、0 个 manage）、`adminAndTesterPermissionSetsAreUnchangedByV005`（54 / 21 不变） | ⚠️ **Pending** —— Testcontainers 不可用（见下） |
+
+### 本轮验证结果（真实执行）
+
+| 命令 | 结果 |
+|------|------|
+| `mvn clean test` | ✅ BUILD SUCCESS；**116 tests, 0 failures, 0 errors**（上轮 111 + V005 契约测试 4 + standard q 契约测试 1） |
+| `mvn verify`（*IT） | ⚠️ **本轮实际执行过，仍失败**：Docker daemon 在线但 Testcontainers PostgreSQL 从测试 JVM 不可达（`CannotCreateTransaction: Could not open JPA EntityManager`），**18 IT 中 10 error、0 failure → BUILD FAILURE**。IT 如实标记 **Pending，不标 PASS** |
+| `npm run typecheck` | ✅ 0 error |
+| `npm run lint` | ✅ 0 warning（`--max-warnings 0`） |
+| `npm run test` | ✅ 27 tests, 0 failures |
+| `npm run build` | ✅ 成功 |
+
+> **注 5（本轮 IT 如实报告）：** 与 Round 3 结论一致，属沙箱基础设施/网络限制，非代码缺陷。新增的 `MigrationIT` 断言（111 总数 / 协调员 5 个 read / ADMIN·TESTER 不变）**已写入仓库但未执行**，待具备可用 Testcontainers 的 CI 环境回归。为让 V005 的保证在无 DB 环境下仍可验证，额外提供了可真实运行的静态契约测试 `V005CoordinatorReadPermissionsTest`（已通过）。
+
+> **Migration 版本所有权：** V005 由本轮 Review 修复占用。**Phase 6 及后续 Migration 必须从 V006 开始。**
+
+---
+
 ## In Progress
 
-无。Phase 0–5 已完成集成。
+无。Phase 0–5 已完成，Code Review Round 修复已集成。
 
 ---
 

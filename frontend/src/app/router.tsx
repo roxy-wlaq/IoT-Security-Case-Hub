@@ -19,7 +19,7 @@ import { CapabilityAdminPage } from '@/features/capability/pages/CapabilityAdmin
  * 不在映射里的导航项继续渲染占位页，直到对应 Phase 完成。
  */
 const pageComponents: Record<string, ComponentType> = {
-  '/capabilities': CapabilityAdminPage,
+  '/admin/capabilities': CapabilityAdminPage,
   '/admin/standards': StandardAdminPage,
   '/admin/categories': CategoryAdminPage,
   '/admin/tags': TagAdminPage,

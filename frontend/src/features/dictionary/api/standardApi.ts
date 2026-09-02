@@ -4,7 +4,7 @@ import type { StandardListParams, StandardTaskType, StandardType } from '@/share
 /**
  * 标准任务类型 / 任务类型 API（冻结契约）。
  *
- *   GET    /api/v1/standard-task-types?search=&enabled=&type=
+ *   GET    /api/v1/standard-task-types?q=&enabled=&type=
  *   POST   /api/v1/standard-task-types
  *   PUT    /api/v1/standard-task-types/{id}
  */

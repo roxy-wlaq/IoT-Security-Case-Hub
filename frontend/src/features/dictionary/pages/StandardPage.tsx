@@ -161,10 +161,10 @@ function StandardFormModal({ open, editing, onClose }: StandardFormModalProps) {
 }
 
 export function StandardAdminPage() {
-  const [search, setSearch] = useState('');
+  const [query, setQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState<StandardType | undefined>(undefined);
   const [enabledFilter, setEnabledFilter] = useState<EnabledFilter | undefined>(undefined);
-  const debouncedSearch = useDebouncedValue(search);
+  const debouncedQuery = useDebouncedValue(query);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<StandardTaskType | null>(null);
@@ -172,11 +172,11 @@ export function StandardAdminPage() {
 
   const params = useMemo(
     () => ({
-      search: debouncedSearch.trim() || undefined,
+      q: debouncedQuery.trim() || undefined,
       type: typeFilter,
       enabled: enabledFilter === 'enabled' ? true : enabledFilter === 'disabled' ? false : undefined,
     }),
-    [debouncedSearch, typeFilter, enabledFilter],
+    [debouncedQuery, typeFilter, enabledFilter],
   );
 
   const { data, isLoading, isError, error, refetch } = useStandards(params);
@@ -256,8 +256,8 @@ export function StandardAdminPage() {
         <Input.Search
           allowClear
           placeholder="按编码或名称搜索"
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
           style={{ width: 260 }}
         />
         <Select<StandardType>

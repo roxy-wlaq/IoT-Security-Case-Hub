@@ -66,16 +66,32 @@ class StandardTaskTypeControllerRbacTest {
     }
 
     @Test
-    void readPassesSearchFiltersToService() throws Exception {
+    void readPassesQueryFiltersToService() throws Exception {
         when(service.list("usb", true, "STANDARD")).thenReturn(List.of());
 
         mockMvc.perform(get(BASE_URL).with(user("reader"))
-                        .param("search", "usb")
+                        .param("q", "usb")
                         .param("enabled", "true")
                         .param("type", "STANDARD"))
                 .andExpect(status().isOk());
 
         verify(service).list("usb", true, "STANDARD");
+    }
+
+    /**
+     * The frozen contract uses {@code q}, not {@code search}. A caller sending the
+     * legacy {@code search} parameter must NOT be silently honoured — the query
+     * filter is then simply unset, which is the only way to catch a client that
+     * still sends the old name.
+     */
+    @Test
+    void legacySearchParameterIsNotBound() throws Exception {
+        when(service.list(null, null, null)).thenReturn(List.of(sampleResponse()));
+
+        mockMvc.perform(get(BASE_URL).with(user("reader")).param("search", "usb"))
+                .andExpect(status().isOk());
+
+        verify(service).list(null, null, null);
     }
 
     @Test

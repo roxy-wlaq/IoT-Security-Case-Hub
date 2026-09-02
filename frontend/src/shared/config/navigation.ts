@@ -71,7 +71,7 @@ export const NAVIGATION_ITEMS: readonly NavigationItem[] = [
     plannedPhase: 'Phase 4',
   },
   {
-    path: '/capabilities',
+    path: '/admin/capabilities',
     label: '能力库',
     permission: 'capability:read',
     description: '设备能力定义树（项目能力矩阵为后续 Phase）。',

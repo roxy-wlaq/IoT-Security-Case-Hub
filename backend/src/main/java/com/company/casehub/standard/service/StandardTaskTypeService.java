@@ -35,8 +35,8 @@ public class StandardTaskTypeService {
         this.repository = repository;
     }
 
-    public List<StandardTaskTypeResponse> list(String search, Boolean enabled, String type) {
-        return repository.findAll(searchSpec(search, enabled, type), Sort.by(Sort.Direction.ASC, "code"))
+    public List<StandardTaskTypeResponse> list(String q, Boolean enabled, String type) {
+        return repository.findAll(querySpec(q, enabled, type), Sort.by(Sort.Direction.ASC, "code"))
                 .stream()
                 .map(StandardTaskTypeResponse::from)
                 .toList();
@@ -95,11 +95,16 @@ public class StandardTaskTypeService {
         return description.trim();
     }
 
-    private static Specification<StandardTaskTypeEntity> searchSpec(String search, Boolean enabled, String type) {
+    /**
+     * Free-text filter over {@code name} / {@code code}. The query parameter is the
+     * frozen contract's {@code q} (not {@code search}) — see
+     * {@code GET /api/v1/standard-task-types?q=...}.
+     */
+    private static Specification<StandardTaskTypeEntity> querySpec(String q, Boolean enabled, String type) {
         return (root, query, criteriaBuilder) -> {
             List<Predicate> predicates = new ArrayList<>();
-            if (StringUtils.hasText(search)) {
-                String pattern = "%" + search.trim().toLowerCase() + "%";
+            if (StringUtils.hasText(q)) {
+                String pattern = "%" + q.trim().toLowerCase() + "%";
                 predicates.add(criteriaBuilder.or(
                         criteriaBuilder.like(criteriaBuilder.lower(root.get("name")), pattern),
                         criteriaBuilder.like(criteriaBuilder.lower(root.get("code")), pattern)));
