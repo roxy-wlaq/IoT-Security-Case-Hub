@@ -6,31 +6,42 @@ import { useForm } from 'react-hook-form';
 import { PermissionGuard } from '@/shared/components/PermissionGuard';
 import { useDebouncedValue } from '@/shared/hooks/useDebouncedValue';
 import { toApiError } from '@/shared/api/apiError';
-import {
-  useCategories,
-  useCreateCategory,
-  useToggleCategoryEnabled,
-  useUpdateCategory,
-} from '@/features/dictionary/hooks/useCategories';
+import { useCategories, useCreateCategory, useUpdateCategory } from '@/features/dictionary/hooks/useCategories';
 import { CATEGORY_FORM_DEFAULTS, categorySchema } from '@/features/dictionary/schemas/categorySchema';
 import type { CategoryFormValues } from '@/features/dictionary/schemas/categorySchema';
 import type { Category, CategoryLevel } from '@/shared/types/dictionary';
 
 const CATEGORY_MANAGE_PERMISSION = 'category:manage';
 
+/** AntD Select 的 value 只接受 string | number | null，用字符串值承载布尔筛选。 */
+type EnabledFilter = 'enabled' | 'disabled';
+
+const ENABLED_FILTER_OPTIONS = [
+  { value: 'enabled', label: '启用' },
+  { value: 'disabled', label: '禁用' },
+];
+
 interface CategoryFormModalProps {
   open: boolean;
   editing: Category | null;
+  /** 新建二级分类时预设的父分类；新建一级/编辑时为 null */
+  presetParent: Category | null;
   /** 一级分类列表，供二级分类选择父分类 */
   parentOptions: Category[];
   onClose: () => void;
 }
 
-function CategoryFormModal({ open, editing, parentOptions, onClose }: CategoryFormModalProps) {
+function CategoryFormModal({ open, editing, presetParent, parentOptions, onClose }: CategoryFormModalProps) {
   const createMutation = useCreateCategory();
   const updateMutation = useUpdateCategory();
 
   const isEditing = Boolean(editing);
+
+  /**
+   * level 永远由上下文推导（编辑对象本身 / 预设父分类），表单里没有任何 level 输入；
+   * 服务端会根据 parentId 最终裁决。
+   */
+  const level: CategoryLevel = editing ? editing.level : presetParent ? 2 : 1;
 
   const defaultValues: CategoryFormValues = useMemo(() => {
     if (editing) {
@@ -44,8 +55,11 @@ function CategoryFormModal({ open, editing, parentOptions, onClose }: CategoryFo
         enabled: editing.enabled,
       };
     }
+    if (presetParent) {
+      return { ...CATEGORY_FORM_DEFAULTS, level: 2, parentId: presetParent.id };
+    }
     return CATEGORY_FORM_DEFAULTS;
-  }, [editing]);
+  }, [editing, presetParent]);
 
   const {
     register,
@@ -64,7 +78,6 @@ function CategoryFormModal({ open, editing, parentOptions, onClose }: CategoryFo
     reset(defaultValues);
   }, [defaultValues, reset]);
 
-  const levelValue = watch('level');
   const parentIdValue = watch('parentId');
   const enabledValue = watch('enabled');
   const sortOrderValue = watch('sortOrder');
@@ -73,10 +86,14 @@ function CategoryFormModal({ open, editing, parentOptions, onClose }: CategoryFo
   const submitError = toApiError(createMutation.error ?? updateMutation.error);
 
   const onSubmit = handleSubmit(async (values) => {
+    // 不发送 level：服务端从 parentId 推导
     const payload = {
-      ...values,
-      parentId: values.level === 2 ? values.parentId : null,
+      parentId: level === 2 ? values.parentId : null,
+      code: values.code,
+      name: values.name,
       description: values.description?.trim() ? values.description.trim() : undefined,
+      sortOrder: values.sortOrder,
+      enabled: values.enabled,
     };
     try {
       if (isEditing && editing) {
@@ -102,7 +119,13 @@ function CategoryFormModal({ open, editing, parentOptions, onClose }: CategoryFo
 
   return (
     <Modal
-      title={isEditing ? '编辑分类' : '新建分类'}
+      title={
+        isEditing
+          ? `编辑${level === 1 ? '一级' : '二级'}分类`
+          : level === 2
+            ? `在「${presetParent?.name ?? ''}」下新建二级分类`
+            : '新建一级分类'
+      }
       open={open}
       onCancel={onClose}
       confirmLoading={pending}
@@ -117,29 +140,7 @@ function CategoryFormModal({ open, editing, parentOptions, onClose }: CategoryFo
       ) : null}
 
       <Form layout="vertical" requiredMark>
-        <Form.Item
-          label="层级"
-          required
-          validateStatus={errors.level ? 'error' : undefined}
-          help={errors.level?.message}
-        >
-          <Select<CategoryLevel>
-            value={levelValue}
-            onChange={(value) => {
-              setValue('level', value, { shouldValidate: true });
-              if (value === 1) {
-                setValue('parentId', null, { shouldValidate: true });
-              }
-            }}
-            disabled={pending}
-            options={[
-              { value: 1, label: '一级分类' },
-              { value: 2, label: '二级分类' },
-            ]}
-          />
-        </Form.Item>
-
-        {levelValue === 2 ? (
+        {level === 2 ? (
           <Form.Item
             label="父分类"
             required
@@ -211,36 +212,37 @@ function CategoryFormModal({ open, editing, parentOptions, onClose }: CategoryFo
   );
 }
 
-export function CategoryPage() {
+export function CategoryAdminPage() {
   const [search, setSearch] = useState('');
-  const [enabledFilter, setEnabledFilter] = useState<boolean | undefined>(undefined);
+  const [enabledFilter, setEnabledFilter] = useState<EnabledFilter | undefined>(undefined);
   const debouncedSearch = useDebouncedValue(search);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Category | null>(null);
+  const [presetParent, setPresetParent] = useState<Category | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
 
   const params = useMemo(
     () => ({
       search: debouncedSearch.trim() || undefined,
-      enabled: enabledFilter,
+      enabled: enabledFilter === 'enabled' ? true : enabledFilter === 'disabled' ? false : undefined,
     }),
     [debouncedSearch, enabledFilter],
   );
 
   const { data, isLoading, isError, error, refetch } = useCategories(params);
-  const toggleMutation = useToggleCategoryEnabled();
+  const updateMutation = useUpdateCategory();
 
   useEffect(() => {
-    if (!toggleMutation.isPending) {
+    if (!updateMutation.isPending) {
       setTogglingId(null);
     }
-  }, [toggleMutation.isPending]);
+  }, [updateMutation.isPending]);
 
   const handleToggle = async (record: Category) => {
     setTogglingId(record.id);
     try {
-      await toggleMutation.mutateAsync(record.id);
+      await updateMutation.mutateAsync({ id: record.id, payload: { enabled: !record.enabled } });
     } catch {
       setTogglingId(null);
     }
@@ -248,11 +250,19 @@ export function CategoryPage() {
 
   const handleEdit = (record: Category) => {
     setEditing(record);
+    setPresetParent(null);
     setModalOpen(true);
   };
 
-  const handleCreate = () => {
+  const handleCreateRoot = () => {
     setEditing(null);
+    setPresetParent(null);
+    setModalOpen(true);
+  };
+
+  const handleCreateChild = (parent: Category) => {
+    setEditing(null);
+    setPresetParent(parent);
     setModalOpen(true);
   };
 
@@ -279,13 +289,18 @@ export function CategoryPage() {
     {
       title: '操作',
       key: 'actions',
-      width: 180,
+      width: 240,
       render: (_: unknown, record: Category) => (
         <Space>
           <PermissionGuard permission={CATEGORY_MANAGE_PERMISSION}>
             <Button type="link" size="small" onClick={() => handleEdit(record)} disabled={togglingId === record.id}>
               编辑
             </Button>
+            {record.level === 1 ? (
+              <Button type="link" size="small" onClick={() => handleCreateChild(record)}>
+                新增二级
+              </Button>
+            ) : null}
             <Button
               type="link"
               size="small"
@@ -312,20 +327,17 @@ export function CategoryPage() {
           onChange={(event) => setSearch(event.target.value)}
           style={{ width: 260 }}
         />
-        <Select<boolean>
+        <Select<EnabledFilter>
           allowClear
           placeholder="按状态筛选"
           value={enabledFilter}
           onChange={(value) => setEnabledFilter(value)}
           style={{ width: 140 }}
-          options={[
-            { value: true, label: '启用' },
-            { value: false, label: '禁用' },
-          ]}
+          options={ENABLED_FILTER_OPTIONS}
         />
         <PermissionGuard permission={CATEGORY_MANAGE_PERMISSION}>
-          <Button type="primary" onClick={handleCreate}>
-            新建
+          <Button type="primary" onClick={handleCreateRoot}>
+            新建一级分类
           </Button>
         </PermissionGuard>
       </Space>
@@ -350,20 +362,22 @@ export function CategoryPage() {
         dataSource={data}
         loading={isLoading}
         pagination={false}
-        expandable={{ childrenColumnName: 'children' }}
+        expandable={{ childrenColumnName: 'children', defaultExpandAllRows: true }}
       />
 
       <CategoryFormModal
         open={modalOpen}
         editing={editing}
+        presetParent={presetParent}
         parentOptions={parentOptions}
         onClose={() => {
           setModalOpen(false);
           setEditing(null);
+          setPresetParent(null);
         }}
       />
     </div>
   );
 }
 
-export default CategoryPage;
+export default CategoryAdminPage;

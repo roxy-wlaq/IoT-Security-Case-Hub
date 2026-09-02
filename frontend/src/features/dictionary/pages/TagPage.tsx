@@ -1,17 +1,25 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Alert, Button, Form, Input, Modal, Select, Space, Switch, Table, Tag, Typography } from 'antd';
+import { Alert, Button, Form, Input, Modal, Select, Space, Switch, Table, Tag as AntdTag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { PermissionGuard } from '@/shared/components/PermissionGuard';
 import { useDebouncedValue } from '@/shared/hooks/useDebouncedValue';
 import { toApiError } from '@/shared/api/apiError';
-import { useCreateTag, useTags, useToggleTagEnabled, useUpdateTag } from '@/features/dictionary/hooks/useTags';
+import { useCreateTag, useTags, useUpdateTag } from '@/features/dictionary/hooks/useTags';
 import { TAG_FORM_DEFAULTS, tagSchema } from '@/features/dictionary/schemas/tagSchema';
 import type { TagFormValues } from '@/features/dictionary/schemas/tagSchema';
 import type { Tag } from '@/shared/types/dictionary';
 
 const TAG_MANAGE_PERMISSION = 'tag:manage';
+
+/** AntD Select 的 value 只接受 string | number | null，用字符串值承载布尔筛选。 */
+type EnabledFilter = 'enabled' | 'disabled';
+
+const ENABLED_FILTER_OPTIONS = [
+  { value: 'enabled', label: '启用' },
+  { value: 'disabled', label: '禁用' },
+];
 
 interface TagFormModalProps {
   open: boolean;
@@ -28,6 +36,7 @@ function TagFormModal({ open, editing, onClose }: TagFormModalProps) {
   const defaultValues: TagFormValues = useMemo(() => {
     if (editing) {
       return {
+        code: editing.code,
         name: editing.name,
         description: editing.description ?? '',
         enabled: editing.enabled,
@@ -93,6 +102,15 @@ function TagFormModal({ open, editing, onClose }: TagFormModalProps) {
 
       <Form layout="vertical" requiredMark>
         <Form.Item
+          label="编码"
+          required
+          validateStatus={errors.code ? 'error' : undefined}
+          help={errors.code?.message}
+        >
+          <Input {...register('code')} placeholder="例如 TAG-USB" disabled={pending} />
+        </Form.Item>
+
+        <Form.Item
           label="名称"
           required
           validateStatus={errors.name ? 'error' : undefined}
@@ -121,9 +139,9 @@ function TagFormModal({ open, editing, onClose }: TagFormModalProps) {
   );
 }
 
-export function TagPage() {
+export function TagAdminPage() {
   const [search, setSearch] = useState('');
-  const [enabledFilter, setEnabledFilter] = useState<boolean | undefined>(undefined);
+  const [enabledFilter, setEnabledFilter] = useState<EnabledFilter | undefined>(undefined);
   const debouncedSearch = useDebouncedValue(search);
 
   const [modalOpen, setModalOpen] = useState(false);
@@ -133,24 +151,24 @@ export function TagPage() {
   const params = useMemo(
     () => ({
       search: debouncedSearch.trim() || undefined,
-      enabled: enabledFilter,
+      enabled: enabledFilter === 'enabled' ? true : enabledFilter === 'disabled' ? false : undefined,
     }),
     [debouncedSearch, enabledFilter],
   );
 
   const { data, isLoading, isError, error, refetch } = useTags(params);
-  const toggleMutation = useToggleTagEnabled();
+  const updateMutation = useUpdateTag();
 
   useEffect(() => {
-    if (!toggleMutation.isPending) {
+    if (!updateMutation.isPending) {
       setTogglingId(null);
     }
-  }, [toggleMutation.isPending]);
+  }, [updateMutation.isPending]);
 
   const handleToggle = async (record: Tag) => {
     setTogglingId(record.id);
     try {
-      await toggleMutation.mutateAsync(record.id);
+      await updateMutation.mutateAsync({ id: record.id, payload: { enabled: !record.enabled } });
     } catch {
       setTogglingId(null);
     }
@@ -167,6 +185,7 @@ export function TagPage() {
   };
 
   const columns: ColumnsType<Tag> = [
+    { title: '编码', dataIndex: 'code', key: 'code', width: 160 },
     { title: '名称', dataIndex: 'name', key: 'name' },
     { title: '描述', dataIndex: 'description', key: 'description', ellipsis: true },
     {
@@ -174,7 +193,7 @@ export function TagPage() {
       dataIndex: 'enabled',
       key: 'enabled',
       width: 90,
-      render: (enabled: boolean) => (enabled ? <Tag color="green">启用</Tag> : <Tag>禁用</Tag>),
+      render: (enabled: boolean) => (enabled ? <AntdTag color="green">启用</AntdTag> : <AntdTag>禁用</AntdTag>),
     },
     {
       title: '操作',
@@ -207,21 +226,18 @@ export function TagPage() {
       <Space style={{ marginBottom: 16 }} wrap>
         <Input.Search
           allowClear
-          placeholder="按名称搜索"
+          placeholder="按编码或名称搜索"
           value={search}
           onChange={(event) => setSearch(event.target.value)}
           style={{ width: 260 }}
         />
-        <Select
+        <Select<EnabledFilter>
           allowClear
           placeholder="按状态筛选"
           value={enabledFilter}
           onChange={(value) => setEnabledFilter(value)}
           style={{ width: 140 }}
-          options={[
-            { value: true, label: '启用' },
-            { value: false, label: '禁用' },
-          ]}
+          options={ENABLED_FILTER_OPTIONS}
         />
         <PermissionGuard permission={TAG_MANAGE_PERMISSION}>
           <Button type="primary" onClick={handleCreate}>
@@ -264,4 +280,4 @@ export function TagPage() {
   );
 }
 
-export default TagPage;
+export default TagAdminPage;

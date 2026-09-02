@@ -2,13 +2,12 @@ import { httpClient } from '@/shared/api/httpClient';
 import type { DictionaryListParams, Tool } from '@/shared/types/dictionary';
 
 /**
- * 工具 API。
+ * 工具 API（冻结契约）。
  *
  *   GET    /api/v1/tools?search=&enabled=
  *   GET    /api/v1/tools/{id}
  *   POST   /api/v1/tools
  *   PUT    /api/v1/tools/{id}
- *   PUT    /api/v1/tools/{id}/toggle-enabled
  */
 const TOOL_BASE = '/tools';
 
@@ -23,6 +22,7 @@ export async function getToolById(id: string): Promise<Tool> {
 }
 
 export interface ToolCreatePayload {
+  code: string;
   name: string;
   description?: string;
   platform?: string;
@@ -36,6 +36,7 @@ export async function createTool(payload: ToolCreatePayload): Promise<Tool> {
 }
 
 export interface ToolUpdatePayload {
+  code?: string;
   name?: string;
   description?: string;
   platform?: string;
@@ -45,10 +46,5 @@ export interface ToolUpdatePayload {
 
 export async function updateTool(id: string, payload: ToolUpdatePayload): Promise<Tool> {
   const response = await httpClient.put<Tool>(`${TOOL_BASE}/${id}`, payload);
-  return response.data;
-}
-
-export async function toggleToolEnabled(id: string): Promise<Tool> {
-  const response = await httpClient.put<Tool>(`${TOOL_BASE}/${id}/toggle-enabled`);
   return response.data;
 }
