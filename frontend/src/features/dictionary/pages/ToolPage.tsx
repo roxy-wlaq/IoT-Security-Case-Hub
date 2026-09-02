@@ -6,12 +6,20 @@ import { useForm } from 'react-hook-form';
 import { PermissionGuard } from '@/shared/components/PermissionGuard';
 import { useDebouncedValue } from '@/shared/hooks/useDebouncedValue';
 import { toApiError } from '@/shared/api/apiError';
-import { useCreateTool, useTools, useToggleToolEnabled, useUpdateTool } from '@/features/dictionary/hooks/useTools';
+import { useCreateTool, useTools, useUpdateTool } from '@/features/dictionary/hooks/useTools';
 import { TOOL_FORM_DEFAULTS, toolSchema } from '@/features/dictionary/schemas/toolSchema';
 import type { ToolFormValues } from '@/features/dictionary/schemas/toolSchema';
 import type { Tool } from '@/shared/types/dictionary';
 
 const TOOL_MANAGE_PERMISSION = 'tool:manage';
+
+/** AntD Select 的 value 只接受 string | number | null，用字符串值承载布尔筛选。 */
+type EnabledFilter = 'enabled' | 'disabled';
+
+const ENABLED_FILTER_OPTIONS = [
+  { value: 'enabled', label: '启用' },
+  { value: 'disabled', label: '禁用' },
+];
 
 interface ToolFormModalProps {
   open: boolean;
@@ -28,6 +36,7 @@ function ToolFormModal({ open, editing, onClose }: ToolFormModalProps) {
   const defaultValues: ToolFormValues = useMemo(() => {
     if (editing) {
       return {
+        code: editing.code,
         name: editing.name,
         platform: editing.platform ?? '',
         website: editing.website ?? '',
@@ -98,6 +107,15 @@ function ToolFormModal({ open, editing, onClose }: ToolFormModalProps) {
 
       <Form layout="vertical" requiredMark>
         <Form.Item
+          label="编码"
+          required
+          validateStatus={errors.code ? 'error' : undefined}
+          help={errors.code?.message}
+        >
+          <Input {...register('code')} placeholder="例如 TOOL-NMAP" disabled={pending} />
+        </Form.Item>
+
+        <Form.Item
           label="名称"
           required
           validateStatus={errors.name ? 'error' : undefined}
@@ -144,7 +162,7 @@ function ToolFormModal({ open, editing, onClose }: ToolFormModalProps) {
 
 export function ToolPage() {
   const [search, setSearch] = useState('');
-  const [enabledFilter, setEnabledFilter] = useState<boolean | undefined>(undefined);
+  const [enabledFilter, setEnabledFilter] = useState<EnabledFilter | undefined>(undefined);
   const debouncedSearch = useDebouncedValue(search);
 
   const [modalOpen, setModalOpen] = useState(false);
@@ -154,24 +172,24 @@ export function ToolPage() {
   const params = useMemo(
     () => ({
       search: debouncedSearch.trim() || undefined,
-      enabled: enabledFilter,
+      enabled: enabledFilter === 'enabled' ? true : enabledFilter === 'disabled' ? false : undefined,
     }),
     [debouncedSearch, enabledFilter],
   );
 
   const { data, isLoading, isError, error, refetch } = useTools(params);
-  const toggleMutation = useToggleToolEnabled();
+  const updateMutation = useUpdateTool();
 
   useEffect(() => {
-    if (!toggleMutation.isPending) {
+    if (!updateMutation.isPending) {
       setTogglingId(null);
     }
-  }, [toggleMutation.isPending]);
+  }, [updateMutation.isPending]);
 
   const handleToggle = async (record: Tool) => {
     setTogglingId(record.id);
     try {
-      await toggleMutation.mutateAsync(record.id);
+      await updateMutation.mutateAsync({ id: record.id, payload: { enabled: !record.enabled } });
     } catch {
       setTogglingId(null);
     }
@@ -188,6 +206,7 @@ export function ToolPage() {
   };
 
   const columns: ColumnsType<Tool> = [
+    { title: '编码', dataIndex: 'code', key: 'code', width: 160 },
     { title: '名称', dataIndex: 'name', key: 'name' },
     { title: '平台', dataIndex: 'platform', key: 'platform', width: 140 },
     {
@@ -244,21 +263,18 @@ export function ToolPage() {
       <Space style={{ marginBottom: 16 }} wrap>
         <Input.Search
           allowClear
-          placeholder="按名称搜索"
+          placeholder="按编码或名称搜索"
           value={search}
           onChange={(event) => setSearch(event.target.value)}
           style={{ width: 260 }}
         />
-        <Select
+        <Select<EnabledFilter>
           allowClear
           placeholder="按状态筛选"
           value={enabledFilter}
           onChange={(value) => setEnabledFilter(value)}
           style={{ width: 140 }}
-          options={[
-            { value: true, label: '启用' },
-            { value: false, label: '禁用' },
-          ]}
+          options={ENABLED_FILTER_OPTIONS}
         />
         <PermissionGuard permission={TOOL_MANAGE_PERMISSION}>
           <Button type="primary" onClick={handleCreate}>

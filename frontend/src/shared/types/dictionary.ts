@@ -2,10 +2,10 @@
  * Phase 4 基础数据字典类型。
  *
  * 与后端契约对应（Lead 冻结）：
- *   /api/v1/standards   标准任务类型 / 任务类型
- *   /api/v1/categories  二级分类树
- *   /api/v1/tags        标签
- *   /api/v1/tools       工具
+ *   /api/v1/standard-task-types  标准任务类型 / 任务类型
+ *   /api/v1/categories/tree      二级分类树
+ *   /api/v1/tags                 标签
+ *   /api/v1/tools                工具
  */
 
 /** 标准任务类型 / 任务类型 */
@@ -45,6 +45,7 @@ export interface Category {
 /** 标签 */
 export interface Tag {
   id: string;
+  code: string;
   name: string;
   description?: string;
   enabled: boolean;
@@ -55,6 +56,7 @@ export interface Tag {
 /** 工具 */
 export interface Tool {
   id: string;
+  code: string;
   name: string;
   description?: string;
   platform?: string;

@@ -6,17 +6,25 @@ import { useForm } from 'react-hook-form';
 import { PermissionGuard } from '@/shared/components/PermissionGuard';
 import { useDebouncedValue } from '@/shared/hooks/useDebouncedValue';
 import { toApiError } from '@/shared/api/apiError';
-import {
-  useCreateStandard,
-  useStandards,
-  useToggleStandardEnabled,
-  useUpdateStandard,
-} from '@/features/dictionary/hooks/useStandards';
+import { useCreateStandard, useStandards, useUpdateStandard } from '@/features/dictionary/hooks/useStandards';
 import { STANDARD_FORM_DEFAULTS, standardSchema } from '@/features/dictionary/schemas/standardSchema';
 import type { StandardFormValues } from '@/features/dictionary/schemas/standardSchema';
 import type { StandardTaskType, StandardType } from '@/shared/types/dictionary';
 
 const STANDARD_MANAGE_PERMISSION = 'standard:manage';
+
+/** AntD Select 的 value 只接受 string | number | null，用字符串值承载布尔筛选。 */
+type EnabledFilter = 'enabled' | 'disabled';
+
+const TYPE_OPTIONS = [
+  { value: 'STANDARD', label: '标准 (STANDARD)' },
+  { value: 'TASK_TYPE', label: '任务类型 (TASK_TYPE)' },
+];
+
+const ENABLED_FILTER_OPTIONS = [
+  { value: 'enabled', label: '启用' },
+  { value: 'disabled', label: '禁用' },
+];
 
 interface StandardFormModalProps {
   open: boolean;
@@ -128,10 +136,7 @@ function StandardFormModal({ open, editing, onClose }: StandardFormModalProps) {
             value={typeValue}
             onChange={(value) => setValue('type', value, { shouldValidate: true })}
             disabled={pending}
-            options={[
-              { value: 'STANDARD', label: '标准 (STANDARD)' },
-              { value: 'TASK_TYPE', label: '任务类型 (TASK_TYPE)' },
-            ]}
+            options={TYPE_OPTIONS}
           />
         </Form.Item>
 
@@ -155,10 +160,10 @@ function StandardFormModal({ open, editing, onClose }: StandardFormModalProps) {
   );
 }
 
-export function StandardPage() {
+export function StandardAdminPage() {
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<StandardType | undefined>(undefined);
-  const [enabledFilter, setEnabledFilter] = useState<boolean | undefined>(undefined);
+  const [enabledFilter, setEnabledFilter] = useState<EnabledFilter | undefined>(undefined);
   const debouncedSearch = useDebouncedValue(search);
 
   const [modalOpen, setModalOpen] = useState(false);
@@ -169,24 +174,24 @@ export function StandardPage() {
     () => ({
       search: debouncedSearch.trim() || undefined,
       type: typeFilter,
-      enabled: enabledFilter,
+      enabled: enabledFilter === 'enabled' ? true : enabledFilter === 'disabled' ? false : undefined,
     }),
     [debouncedSearch, typeFilter, enabledFilter],
   );
 
   const { data, isLoading, isError, error, refetch } = useStandards(params);
-  const toggleMutation = useToggleStandardEnabled();
+  const updateMutation = useUpdateStandard();
 
   useEffect(() => {
-    if (!toggleMutation.isPending) {
+    if (!updateMutation.isPending) {
       setTogglingId(null);
     }
-  }, [toggleMutation.isPending]);
+  }, [updateMutation.isPending]);
 
   const handleToggle = async (record: StandardTaskType) => {
     setTogglingId(record.id);
     try {
-      await toggleMutation.mutateAsync(record.id);
+      await updateMutation.mutateAsync({ id: record.id, payload: { enabled: !record.enabled } });
     } catch {
       setTogglingId(null);
     }
@@ -210,9 +215,7 @@ export function StandardPage() {
       dataIndex: 'type',
       key: 'type',
       width: 140,
-      render: (type: StandardType) => (
-        <Tag color={type === 'STANDARD' ? 'blue' : 'purple'}>{type}</Tag>
-      ),
+      render: (type: StandardType) => <Tag color={type === 'STANDARD' ? 'blue' : 'purple'}>{type}</Tag>,
     },
     {
       title: '状态',
@@ -263,21 +266,15 @@ export function StandardPage() {
           value={typeFilter}
           onChange={(value) => setTypeFilter(value)}
           style={{ width: 180 }}
-          options={[
-            { value: 'STANDARD', label: '标准 (STANDARD)' },
-            { value: 'TASK_TYPE', label: '任务类型 (TASK_TYPE)' },
-          ]}
+          options={TYPE_OPTIONS}
         />
-        <Select<boolean>
+        <Select<EnabledFilter>
           allowClear
           placeholder="按状态筛选"
           value={enabledFilter}
           onChange={(value) => setEnabledFilter(value)}
           style={{ width: 140 }}
-          options={[
-            { value: true, label: '启用' },
-            { value: false, label: '禁用' },
-          ]}
+          options={ENABLED_FILTER_OPTIONS}
         />
         <PermissionGuard permission={STANDARD_MANAGE_PERMISSION}>
           <Button type="primary" onClick={handleCreate}>
@@ -320,4 +317,4 @@ export function StandardPage() {
   );
 }
 
-export default StandardPage;
+export default StandardAdminPage;

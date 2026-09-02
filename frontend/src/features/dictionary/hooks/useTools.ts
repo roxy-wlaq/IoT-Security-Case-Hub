@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { QueryClient, UseMutationResult, UseQueryResult } from '@tanstack/react-query';
-import { createTool, getToolById, listTools, toggleToolEnabled, updateTool } from '@/features/dictionary/api/toolApi';
+import type { UseMutationResult, UseQueryResult } from '@tanstack/react-query';
+import { createTool, getToolById, listTools, updateTool } from '@/features/dictionary/api/toolApi';
 import type { ToolCreatePayload, ToolUpdatePayload } from '@/features/dictionary/api/toolApi';
 import type { ApiError } from '@/shared/api/apiError';
 import type { DictionaryListParams, Tool } from '@/shared/types/dictionary';
@@ -13,14 +13,6 @@ export function toolListQueryKey(params?: DictionaryListParams): readonly unknow
 
 export function toolDetailQueryKey(id: string): readonly unknown[] {
   return [...toolsQueryKey, 'detail', id] as const;
-}
-
-function invalidateTools(queryClient: QueryClient, id?: string): Promise<unknown> {
-  const promises: Promise<unknown>[] = [queryClient.invalidateQueries({ queryKey: toolsQueryKey })];
-  if (id) {
-    promises.push(queryClient.invalidateQueries({ queryKey: toolDetailQueryKey(id) }));
-  }
-  return Promise.all(promises);
 }
 
 /** GET /api/v1/tools */
@@ -46,7 +38,7 @@ export function useCreateTool(): UseMutationResult<Tool, ApiError, ToolCreatePay
   const queryClient = useQueryClient();
   return useMutation<Tool, ApiError, ToolCreatePayload>({
     mutationFn: createTool,
-    onSuccess: () => invalidateTools(queryClient),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: toolsQueryKey }),
   });
 }
 
@@ -55,15 +47,6 @@ export function useUpdateTool(): UseMutationResult<Tool, ApiError, { id: string;
   const queryClient = useQueryClient();
   return useMutation<Tool, ApiError, { id: string; payload: ToolUpdatePayload }>({
     mutationFn: ({ id, payload }) => updateTool(id, payload),
-    onSuccess: (data) => invalidateTools(queryClient, data.id),
-  });
-}
-
-/** PUT /api/v1/tools/{id}/toggle-enabled */
-export function useToggleToolEnabled(): UseMutationResult<Tool, ApiError, string> {
-  const queryClient = useQueryClient();
-  return useMutation<Tool, ApiError, string>({
-    mutationFn: toggleToolEnabled,
-    onSuccess: (data) => invalidateTools(queryClient, data.id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: toolsQueryKey }),
   });
 }

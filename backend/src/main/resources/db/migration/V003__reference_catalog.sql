@@ -1,5 +1,31 @@
--- V003: Dictionary tables — Standard/Task Type, Category, Tag, Tool
+-- V003: Reference catalog (dictionary) tables — Standard/Task Type, Category, Tag, Tool
 -- Database Schema V1.0 §8-9. Lead is Migration Version Owner.
+--
+-- ---------------------------------------------------------------------------
+-- DOCUMENTED DEVIATION FROM THE FROZEN DATABASE SCHEMA V1.0
+-- ---------------------------------------------------------------------------
+-- §9.2 (tags) and §9.3 (tools) do NOT define a `code` column: the frozen schema
+-- only gives them id / name / description / enabled (+ platform, website for tools).
+--
+-- This migration intentionally adds `code VARCHAR(100) NOT NULL` to both tables,
+-- together with case-insensitive unique indexes on `code` and `name`.
+--
+-- Rationale (Spec Owner requirement, Phase 4):
+--   * Tag  — the owner explicitly requires "code / name uniqueness": a tag must be
+--            addressable by a stable machine code (used by later import/export and
+--            generation-rule matching) AND by a human name; both must be unique
+--            case-insensitively.
+--   * Tool — the owner explicitly requires the tool dictionary to expose at least
+--            `id, code, name, description, enabled`. `code` is the stable key used by
+--            test-case tooling references, while `name` stays a display label that may
+--            be edited/translated without breaking those references.
+--
+-- This is a deliberate, approved superset of the frozen schema — NOT an accidental
+-- drift. Everywhere else (column order, types, nullability, the two-level category
+-- model, the pg_trgm search indexes) this file follows Database Schema V1.0 §8-9
+-- exactly. If the document is ever re-frozen, roll the `code` column into it rather
+-- than dropping it.
+-- ---------------------------------------------------------------------------
 
 -- =============================================================================
 -- standard_task_types (§8.1)
@@ -17,6 +43,8 @@ CREATE TABLE IF NOT EXISTS casehub.standard_task_types (
     CONSTRAINT uq_standard_task_types_code UNIQUE (code),
     CONSTRAINT chk_standard_task_types_type CHECK (type IN ('STANDARD', 'TASK_TYPE'))
 );
+CREATE UNIQUE INDEX IF NOT EXISTS uq_standard_task_types_code_lower
+    ON casehub.standard_task_types (LOWER(code));
 
 -- =============================================================================
 -- categories (§9.1) — two-level hierarchy
@@ -41,14 +69,17 @@ CREATE TABLE IF NOT EXISTS casehub.categories (
      OR (level = 2 AND parent_id IS NOT NULL)
     )
 );
-CREATE INDEX IF NOT EXISTS ix_categories_parent ON casehub.categories (parent_id);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_categories_code_lower
+    ON casehub.categories (LOWER(code));
+CREATE INDEX IF NOT EXISTS ix_categories_parent  ON casehub.categories (parent_id);
 CREATE INDEX IF NOT EXISTS ix_categories_enabled ON casehub.categories (enabled);
 
 -- =============================================================================
--- tags (§9.2)
+-- tags (§9.2 + user-mandated `code`)
 -- =============================================================================
 CREATE TABLE IF NOT EXISTS casehub.tags (
     id          UUID        NOT NULL,
+    code        VARCHAR(100) NOT NULL,
     name        VARCHAR(100) NOT NULL,
     description TEXT,
     enabled     BOOLEAN     NOT NULL DEFAULT TRUE,
@@ -56,13 +87,15 @@ CREATE TABLE IF NOT EXISTS casehub.tags (
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT pk_tags PRIMARY KEY (id)
 );
+CREATE UNIQUE INDEX IF NOT EXISTS uq_tags_code_lower ON casehub.tags (LOWER(code));
 CREATE UNIQUE INDEX IF NOT EXISTS uq_tags_name_lower ON casehub.tags (LOWER(name));
 
 -- =============================================================================
--- tools (§9.3)
+-- tools (§9.3 + user-mandated `code`)
 -- =============================================================================
 CREATE TABLE IF NOT EXISTS casehub.tools (
     id          UUID        NOT NULL,
+    code        VARCHAR(100) NOT NULL,
     name        VARCHAR(150) NOT NULL,
     description TEXT,
     platform    VARCHAR(100),
@@ -72,9 +105,12 @@ CREATE TABLE IF NOT EXISTS casehub.tools (
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT pk_tools PRIMARY KEY (id)
 );
+CREATE UNIQUE INDEX IF NOT EXISTS uq_tools_code_lower ON casehub.tools (LOWER(code));
 CREATE UNIQUE INDEX IF NOT EXISTS uq_tools_name_lower ON casehub.tools (LOWER(name));
 
--- pg_trgm search indexes for name/code fields
+-- =============================================================================
+-- pg_trgm fuzzy-search indexes (V001 enables the extension)
+-- =============================================================================
 CREATE INDEX IF NOT EXISTS idx_standard_task_types_name_trgm
     ON casehub.standard_task_types USING GIN (name gin_trgm_ops);
 CREATE INDEX IF NOT EXISTS idx_categories_name_trgm
