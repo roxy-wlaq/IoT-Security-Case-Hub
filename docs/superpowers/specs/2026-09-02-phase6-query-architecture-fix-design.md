@@ -50,6 +50,10 @@ After the candidate predicate has been applied, exactly one Version is selected 
 
 The same candidate CTE and selection ordering are used by both the page query and the count query. The count is therefore the number of Masters produced by the same one-Master/one-Version selection semantics.
 
+### Count Contract
+
+The count query MUST apply the exact same Master-level `categoryId` and `tagIds` filters as the page query, in addition to sharing the same `candidate_versions` and `selected_versions` semantics. A count that omits either Master-level filter is invalid even when the Version-level predicates are identical.
+
 ## Database Query Architecture
 
 Add a `TestCaseLibraryQueryRepository` abstraction with a PostgreSQL implementation using `NamedParameterJdbcTemplate`.
@@ -79,6 +83,10 @@ count query
 The page query returns ordered `masterId`, `versionId`, and `totalElements` (or an equivalent page result). It performs all filtering, List Version selection, ordering, and database pagination before returning rows to Java.
 
 `sort` is parsed against the existing whitelist before being converted into a fixed SQL `ORDER BY` fragment. No request value is interpolated without whitelist validation. Version-backed sort fields use the selected Version: `caseName`, `updatedAt`, and `createdAt`; `caseCode` uses the Master.
+
+### Stable Pagination Contract
+
+Every supported `ORDER BY` ends with the deterministic unique tie-breaker `selected_versions.master_id ASC`. This applies to `caseName`, `updatedAt`, `createdAt`, and `caseCode`, so equal-valued rows cannot change order between requests using `LIMIT` and `OFFSET`.
 
 ## Service Hydration Contract
 
