@@ -39,6 +39,23 @@ public enum ErrorCode {
     CAPABILITY_PARENT_INVALID(HttpStatus.BAD_REQUEST, "Parent capability does not exist."),
     CAPABILITY_CYCLE_DETECTED(HttpStatus.CONFLICT, "Capability tree must not contain a cycle."),
 
+    // ---- Master Test Case Library (Phase 6) ----
+    TEST_CASE_NOT_FOUND(HttpStatus.NOT_FOUND, "Test case not found."),
+    TEST_CASE_CODE_DUPLICATE(HttpStatus.CONFLICT, "Test case code already exists."),
+    TEST_CASE_VERSION_NOT_FOUND(HttpStatus.NOT_FOUND, "Test case version not found."),
+    TEST_CASE_VERSION_DUPLICATE(HttpStatus.CONFLICT, "Test case version already exists."),
+    TEST_CASE_VERSION_IMMUTABLE(HttpStatus.CONFLICT, "This test case version is immutable."),
+    TEST_CASE_DRAFT_REQUIRED(HttpStatus.CONFLICT, "A Draft version is required for this operation."),
+    TEST_CASE_STEP_SEQUENCE_DUPLICATE(HttpStatus.CONFLICT, "Test step sequence is duplicated."),
+    TEST_CASE_STEP_CONTENT_REQUIRED(HttpStatus.BAD_REQUEST, "Test step content is required."),
+    TEST_CASE_CATEGORY_INVALID(HttpStatus.BAD_REQUEST, "Test case category is missing or disabled."),
+    TEST_CASE_TAG_INVALID(HttpStatus.BAD_REQUEST, "One or more test case tags are invalid."),
+    TEST_CASE_TOOL_INVALID(HttpStatus.BAD_REQUEST, "One or more test case tools are invalid."),
+    TEST_CASE_STANDARD_INVALID(HttpStatus.BAD_REQUEST, "One or more standards are invalid."),
+    TEST_CASE_PROGRESSIVE_ROLE_INVALID(HttpStatus.BAD_REQUEST, "Progressive role is invalid."),
+    TEST_CASE_SORT_FIELD_INVALID(HttpStatus.BAD_REQUEST, "Test case sort field is invalid."),
+    TEST_CASE_DRAFT_EDIT_FORBIDDEN(HttpStatus.FORBIDDEN, "You cannot edit this Draft."),
+
     // ---- Generic (reused by later phases) ----
     VALIDATION_FAILED(HttpStatus.BAD_REQUEST, "Request validation failed."),
     RESOURCE_NOT_FOUND(HttpStatus.NOT_FOUND, "The requested resource was not found."),
