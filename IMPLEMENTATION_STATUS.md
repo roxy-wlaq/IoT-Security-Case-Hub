@@ -142,6 +142,26 @@
 > - Stability hardening：集成测试基类增加 `@DirtiesContext(AFTER_CLASS)`，避免 Testcontainers 生命周期与 Spring Context 缓存复用失效连接；注销流程显式移除 SessionRegistry 条目。
 > - 未执行：完整 Docker 服务启动与浏览器端到端流程；本轮未实现 Phase 7 生命周期及后续模块。
 
+### Phase 6 Code Review Round — Fixed（2026-09-02）
+
+> 范围：仅闭环 Phase 6 Code Review，不启动 Phase 7；V006 保持不变，V007 为本轮 Review 修复迁移，V008 保留为 Phase 7 首个迁移号。
+
+| 优先级 | 发现 | 修复与证据 |
+|--------|------|------------|
+| HIGH | V006 Master/Version 删除约束与目标语义不一致 | 新增 V007：将 `fk_test_case_versions_master` 修正为 `ON DELETE RESTRICT`，并为 `master_test_cases.case_code` 增加 pg_trgm GIN 索引；`MasterTestCaseSchemaIT` 在真实 PostgreSQL 上验证迁移、约束、唯一性和删除拒绝。 |
+| HIGH | 仅通过 Mock/Criteria 无法证明 `caseName` 排序 | `TestCaseQueryService` 处理版本名称排序；`TestCaseDraftIT.sortByCaseNameDoesNotFail` 通过真实持久化 Draft 调用 `caseName,asc` 与 `caseName,desc`，断言返回顺序。 |
+| HIGH | Phase 6 前端详情、编辑与最终接口契约未完全闭环 | 新增只读详情/版本历史页面，编辑路由独立为 `/test-cases/{masterId}/edit`；补齐库筛选、分页、标签/更新时间、Progressive Role、标准映射备注；新增 `docs/phase6-api-contract.md` 与一致性测试，契约以最终 Controller/DTO 为准。 |
+| MEDIUM | `caseName` 排序参数会落到 Master 根实体并触发数据库错误 | 排序白名单保留 `caseName`，查询显式按版本名称聚合排序；PostgreSQL IT 对升序和降序均通过。 |
+| MEDIUM | 新 Draft 可引用已禁用字典项 | Category、Tag、Tool、StandardTaskType 的新建/更新引用均要求存在且启用；历史版本读取仍保留；IT 覆盖 `disabledCategoryRejected`、`disabledTagRejected`、`disabledToolRejected`、`disabledStandardRejected`。 |
+
+**本轮提交与测试：**
+
+- 修复提交：`12a6b3d fix(phase6): correct master test case constraints`、`9e34945 fix(phase6): enforce review round backend behavior`、`fa018c6 fix(phase6): complete test case detail and library flows`。
+- Backend：`mvn -q clean test`，125 tests / 0 failures / 0 errors；`mvn -q verify`，33 PostgreSQL Testcontainers IT / 0 failures / 0 errors。
+- Frontend：9 test files / 39 tests 通过；`npm run typecheck`、`npm run lint`、`npm run build` 通过。
+- 新增 PostgreSQL IT：`MasterTestCaseSchemaIT` 8 项，`TestCaseDraftIT` 7 项；新增接口契约一致性测试 1 项。
+- Phase 7 未开始；下一迁移号为 V008，未实现发布、审核、驳回、弃用、决策点、DAG、项目和生成等后续能力。
+
 ---
 
 ## Phase 0–3 Code Review Findings — Fixed (2026-09-02)

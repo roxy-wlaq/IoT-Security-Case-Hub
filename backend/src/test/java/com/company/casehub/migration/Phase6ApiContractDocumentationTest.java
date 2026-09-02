@@ -4,15 +4,18 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 
 class Phase6ApiContractDocumentationTest {
 
-    private static final Path CONTRACT = Path.of("..", "docs", "phase6-api-contract.md");
-
     @Test
     void documentsTheActualPhase6ControllerSurface() throws Exception {
-        String document = Files.readString(CONTRACT);
+        Path contract = Stream.of(Path.of("docs", "phase6-api-contract.md"), Path.of("..", "docs", "phase6-api-contract.md"))
+                .filter(Files::exists)
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException("phase6-api-contract.md not found"));
+        String document = Files.readString(contract);
 
         assertThat(document).contains(
                 "GET /api/v1/test-cases",
