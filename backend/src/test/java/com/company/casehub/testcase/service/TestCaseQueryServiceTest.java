@@ -1,7 +1,6 @@
 package com.company.casehub.testcase.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
 import com.company.casehub.auth.security.UserPrincipal;
@@ -12,7 +11,6 @@ import com.company.casehub.testcase.entity.SelectionMode;
 import com.company.casehub.testcase.entity.TestCaseVersionEntity;
 import com.company.casehub.testcase.entity.TestCaseVersionStatus;
 import com.company.casehub.testcase.repository.MasterTestCaseRepository;
-import com.company.casehub.testcase.repository.TestCaseVersionRepository;
 import com.company.casehub.user.entity.UserEntity;
 import java.util.List;
 import java.util.Optional;
@@ -23,13 +21,12 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.data.domain.PageImpl;
+import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
 class TestCaseQueryServiceTest {
 
     @Mock private MasterTestCaseRepository masterRepository;
-    @Mock private TestCaseVersionRepository versionRepository;
     @InjectMocks private TestCaseQueryService service;
 
     @Test
@@ -78,6 +75,95 @@ class TestCaseQueryServiceTest {
 
         assertThat(response.visibleVersion().caseName()).isEqualTo("Published");
         assertThat(response.currentVersion().caseName()).isEqualTo("Published");
+    }
+
+    @Test
+    void multiVersionCaseNameSortSemantics() {
+        UUID userId = UUID.randomUUID();
+        UserEntity user = user(userId);
+        MasterTestCaseEntity masterA = master(user, "CASE-A");
+        TestCaseVersionEntity oldPublished = version(user, masterA, TestCaseVersionStatus.PUBLISHED, "Alpha");
+        oldPublished.setVersionMinor(0);
+        TestCaseVersionEntity currentPublished = version(user, masterA, TestCaseVersionStatus.PUBLISHED, "Zulu");
+        currentPublished.setVersionMinor(1);
+        currentPublished.setCurrentVersion(true);
+        masterA.setVersions(List.of(oldPublished, currentPublished));
+        MasterTestCaseEntity masterB = master(user, "CASE-B");
+        TestCaseVersionEntity beta = version(user, masterB, TestCaseVersionStatus.PUBLISHED, "Beta");
+        beta.setCurrentVersion(true);
+        masterB.setVersions(List.of(beta));
+        stubList(masterA, masterB);
+
+        assertThat(service.list(null, null, null, null, null, null, 0, 20, "caseName,asc", principal(userId, "TESTER"))
+                .content()).extracting("caseName").containsExactly("Beta", "Zulu");
+        assertThat(service.list(null, null, null, null, null, null, 0, 20, "caseName,desc", principal(userId, "TESTER"))
+                .content()).extracting("caseName").containsExactly("Zulu", "Beta");
+    }
+
+    @Test
+    void statusFilterReturnsMatchingVersion() {
+        UUID userId = UUID.randomUUID();
+        UserEntity user = user(userId);
+        MasterTestCaseEntity master = master(user, "CASE-STATUS");
+        TestCaseVersionEntity draft = version(user, master, TestCaseVersionStatus.DRAFT, "Draft version");
+        draft.setVersionMinor(1);
+        TestCaseVersionEntity published = version(user, master, TestCaseVersionStatus.PUBLISHED, "Published version");
+        published.setVersionMinor(0);
+        published.setCurrentVersion(true);
+        master.setVersions(List.of(draft, published));
+        stubList(master);
+
+        var draftResponse = service.list(null, null, null, null, null, "DRAFT", 0, 20, "updatedAt,desc", principal(userId, "TEST_COORDINATOR"));
+        var publishedResponse = service.list(null, null, null, null, null, "PUBLISHED", 0, 20, "updatedAt,desc", principal(userId, "TEST_COORDINATOR"));
+        assertThat(draftResponse.content()).singleElement().satisfies(summary -> {
+            assertThat(summary.status()).isEqualTo("DRAFT");
+            assertThat(summary.versionLabel()).isEqualTo("1.1");
+            assertThat(summary.caseName()).isEqualTo("Draft version");
+        });
+        assertThat(publishedResponse.content()).singleElement().satisfies(summary -> {
+            assertThat(summary.status()).isEqualTo("PUBLISHED");
+            assertThat(summary.versionLabel()).isEqualTo("1.0");
+            assertThat(summary.caseName()).isEqualTo("Published version");
+        });
+    }
+
+    @Test
+    void summaryUpdatedAtUsesVersion() {
+        UUID userId = UUID.randomUUID();
+        UserEntity user = user(userId);
+        MasterTestCaseEntity master = master(user, "CASE-TIME");
+        TestCaseVersionEntity published = version(user, master, TestCaseVersionStatus.PUBLISHED, "Published");
+        published.setCurrentVersion(true);
+        ReflectionTestUtils.setField(master, "updatedAt", java.time.Instant.parse("2026-01-01T00:00:00Z"));
+        ReflectionTestUtils.setField(published, "updatedAt", java.time.Instant.parse("2026-02-01T00:00:00Z"));
+        master.setVersions(List.of(published));
+        stubList(master);
+
+        assertThat(service.list(null, null, null, null, null, null, 0, 20, "updatedAt,desc", principal(userId, "TESTER"))
+                .content()).singleElement().extracting("updatedAt")
+                .isEqualTo(java.time.Instant.parse("2026-02-01T00:00:00Z"));
+    }
+
+    private void stubList(MasterTestCaseEntity... masters) {
+        when(masterRepository.findAll()).thenReturn(List.of(masters));
+    }
+
+    private static MasterTestCaseEntity master(UserEntity user, String code) {
+        MasterTestCaseEntity master = new MasterTestCaseEntity();
+        master.setId(UUID.randomUUID());
+        master.setCaseCode(code);
+        master.setCreatedBy(user);
+        CategoryEntity category = new CategoryEntity();
+        category.setId(UUID.randomUUID());
+        category.setName("Network");
+        master.setCategory(category);
+        return master;
+    }
+
+    private static UserEntity user(UUID id) {
+        UserEntity user = new UserEntity("owner", "Owner", "hash");
+        user.setId(id);
+        return user;
     }
 
     private static TestCaseVersionEntity version(UserEntity user, MasterTestCaseEntity master,

@@ -13,6 +13,6 @@ public record TestCaseSummaryResponse(UUID id, String caseCode, String caseName,
         return new TestCaseSummaryResponse(master.getId(), master.getCaseCode(), version.getCaseName(), master.getCategory().getId(),
                 master.getCategory().getName(), version.getStatus().name(), version.getVersionMajor(), version.getVersionMinor(),
                 VersionSummaryResponse.label(version), master.getTags().stream().map(t -> TagRef.from(t.getTag())).toList(),
-                master.isEnabled(), master.getUpdatedAt());
+                master.isEnabled(), version.getUpdatedAt());
     }
 }

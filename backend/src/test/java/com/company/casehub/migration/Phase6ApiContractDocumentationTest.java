@@ -25,6 +25,11 @@ class Phase6ApiContractDocumentationTest {
                 "GET /api/v1/test-cases/{masterId}/versions",
                 "GET /api/v1/test-cases/{masterId}/versions/{versionId}",
                 "sort=caseName,asc",
+                "List Version Selection Semantics",
+                "versionLabel",
+                "updatedAt",
+                "同一个 List Version",
+                "不会使用所有 Version 的 `MIN(caseName)`",
                 "totalElements",
                 "mappingNote",
                 "progressiveRole");

@@ -14,19 +14,16 @@ import com.company.casehub.testcase.entity.MasterTestCaseEntity;
 import com.company.casehub.testcase.entity.TestCaseVersionEntity;
 import com.company.casehub.testcase.entity.TestCaseVersionStatus;
 import com.company.casehub.testcase.repository.MasterTestCaseRepository;
-import com.company.casehub.testcase.repository.TestCaseVersionRepository;
-import jakarta.persistence.criteria.JoinType;
-import jakarta.persistence.criteria.Predicate;
-import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
-import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
-import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -37,11 +34,9 @@ public class TestCaseQueryService {
 
     private static final List<String> SORT_FIELDS = List.of("updatedAt", "createdAt", "caseCode", "caseName");
     private final MasterTestCaseRepository masterRepository;
-    private final TestCaseVersionRepository versionRepository;
 
-    public TestCaseQueryService(MasterTestCaseRepository masterRepository, TestCaseVersionRepository versionRepository) {
+    public TestCaseQueryService(MasterTestCaseRepository masterRepository) {
         this.masterRepository = masterRepository;
-        this.versionRepository = versionRepository;
     }
 
     public PagedResponse<TestCaseSummaryResponse> list(String q, UUID categoryId, List<UUID> tagIds, List<UUID> toolIds,
@@ -51,17 +46,23 @@ public class TestCaseQueryService {
             throw new ValidationException(ErrorCode.VALIDATION_FAILED, "Page size must be between 1 and 100.");
         }
         Sort requestedSort = parseSort(sort);
-        boolean sortByVersionName = requestedSort.getOrderFor("caseName") != null;
-        Pageable pageable = PageRequest.of(Math.max(page, 0), size,
-                sortByVersionName ? Sort.unsorted() : requestedSort);
         TestCaseVersionStatus requestedStatus = parseStatus(status);
-        Page<MasterTestCaseEntity> masters = masterRepository.findAll(specification(q, categoryId, tagIds, toolIds,
-                standardTaskTypeIds, requestedStatus, requestedSort, principal), pageable);
-        Page<TestCaseSummaryResponse> response = masters.map(master -> {
-            TestCaseVersionEntity visible = visibleVersion(master, principal);
-            return TestCaseSummaryResponse.from(master, visible);
-        });
-        return PagedResponse.from(response);
+        List<ListEntry> entries = masterRepository.findAll().stream()
+                .map(master -> selectListEntry(master, q, categoryId, tagIds, toolIds, standardTaskTypeIds,
+                        requestedStatus, principal))
+                .flatMap(Optional::stream)
+                .sorted(listComparator(requestedSort))
+                .toList();
+
+        int normalizedPage = Math.max(page, 0);
+        Pageable pageable = PageRequest.of(normalizedPage, size);
+        long offset = (long) normalizedPage * size;
+        int fromIndex = offset >= entries.size() ? entries.size() : (int) offset;
+        int toIndex = Math.min(fromIndex + size, entries.size());
+        List<TestCaseSummaryResponse> content = entries.subList(fromIndex, toIndex).stream()
+                .map(entry -> TestCaseSummaryResponse.from(entry.master(), entry.version()))
+                .toList();
+        return PagedResponse.from(new PageImpl<>(content, pageable, entries.size()));
     }
 
     public TestCaseDetailResponse detail(UUID masterId, UserPrincipal principal) {
@@ -117,52 +118,94 @@ public class TestCaseQueryService {
                 new AllowedActions(editDraft, principal.getPermissions().contains("test_case:draft_create")));
     }
 
-    private Specification<MasterTestCaseEntity> specification(String q, UUID categoryId, List<UUID> tagIds,
-                                                               List<UUID> toolIds, List<UUID> standardIds,
-                                                               TestCaseVersionStatus status, Sort sort,
-                                                               UserPrincipal principal) {
-        return (root, query, cb) -> {
-            query.distinct(true);
-            var versions = root.join("versions", JoinType.LEFT);
-            List<Predicate> predicates = new ArrayList<>();
-            if (categoryId != null) predicates.add(cb.equal(root.get("category").get("id"), categoryId));
-            if (StringUtils.hasText(q)) {
-                String pattern = "%" + q.trim().toLowerCase() + "%";
-                var steps = versions.join("steps", JoinType.LEFT);
-                var tags = root.join("tags", JoinType.LEFT).join("tag", JoinType.LEFT);
-                var tools = versions.join("tools", JoinType.LEFT).join("tool", JoinType.LEFT);
-                predicates.add(cb.or(cb.like(cb.lower(root.get("caseCode")), pattern),
-                        cb.like(cb.lower(versions.get("caseName")), pattern), cb.like(cb.lower(versions.get("testPurpose")), pattern),
-                        cb.like(cb.lower(steps.get("content")), pattern), cb.like(cb.lower(tags.get("name")), pattern),
-                        cb.like(cb.lower(tools.get("name")), pattern)));
+    private Optional<ListEntry> selectListEntry(MasterTestCaseEntity master, String q, UUID categoryId,
+                                                 List<UUID> tagIds, List<UUID> toolIds,
+                                                 List<UUID> standardTaskTypeIds, TestCaseVersionStatus status,
+                                                 UserPrincipal principal) {
+        if (categoryId != null && !Objects.equals(master.getCategory().getId(), categoryId)) {
+            return Optional.empty();
+        }
+        if (tagIds != null && !tagIds.isEmpty() && master.getTags().stream()
+                .noneMatch(tag -> tagIds.contains(tag.getTag().getId()))) {
+            return Optional.empty();
+        }
+
+        List<TestCaseVersionEntity> candidates = visibleVersions(master, principal);
+        boolean hasVersionScopedConstraint = status != null || (toolIds != null && !toolIds.isEmpty())
+                || (standardTaskTypeIds != null && !standardTaskTypeIds.isEmpty());
+        if (StringUtils.hasText(q)) {
+            String term = q.trim();
+            boolean masterMatches = contains(master.getCaseCode(), term)
+                    || master.getTags().stream().anyMatch(tag -> contains(tag.getTag().getName(), term));
+            List<TestCaseVersionEntity> matchingVersions = candidates.stream()
+                    .filter(version -> versionMatches(version, term)).toList();
+            if (!matchingVersions.isEmpty()) {
+                candidates = matchingVersions;
+                hasVersionScopedConstraint = true;
+            } else if (!masterMatches) {
+                return Optional.empty();
             }
-            if (status != null) predicates.add(cb.equal(versions.get("status"), status));
-            if (!isAdmin(principal)) {
-                predicates.add(cb.or(cb.equal(versions.get("status"), TestCaseVersionStatus.PUBLISHED),
-                        cb.and(cb.equal(versions.get("status"), TestCaseVersionStatus.DRAFT),
-                                cb.equal(versions.get("createdBy").get("id"), principal.getId()))));
-            }
-            if (tagIds != null && !tagIds.isEmpty()) {
-                var tags = root.join("tags", JoinType.LEFT).join("tag", JoinType.LEFT);
-                predicates.add(tags.get("id").in(tagIds.stream().distinct().toList()));
-            }
-            if (toolIds != null && !toolIds.isEmpty()) {
-                var tools = versions.join("tools", JoinType.LEFT).join("tool", JoinType.LEFT);
-                predicates.add(tools.get("id").in(toolIds.stream().distinct().toList()));
-            }
-            if (standardIds != null && !standardIds.isEmpty()) {
-                var mappings = versions.join("standardMappings", JoinType.LEFT).join("standardTaskType", JoinType.LEFT);
-                predicates.add(mappings.get("id").in(standardIds.stream().distinct().toList()));
-            }
-            Sort.Order caseNameOrder = sort.getOrderFor("caseName");
-            if (caseNameOrder != null) {
-                query.distinct(false);
-                query.groupBy(root);
-                var versionName = cb.min(versions.get("caseName"));
-                query.orderBy(caseNameOrder.isAscending() ? cb.asc(versionName) : cb.desc(versionName), cb.asc(root.get("caseCode")));
-            }
-            return cb.and(predicates.toArray(Predicate[]::new));
+        }
+        if (status != null) {
+            candidates = candidates.stream().filter(version -> version.getStatus() == status).toList();
+        }
+        if (toolIds != null && !toolIds.isEmpty()) {
+            candidates = candidates.stream().filter(version -> version.getTools().stream()
+                    .anyMatch(tool -> toolIds.contains(tool.getTool().getId()))).toList();
+        }
+        if (standardTaskTypeIds != null && !standardTaskTypeIds.isEmpty()) {
+            candidates = candidates.stream().filter(version -> version.getStandardMappings().stream()
+                    .anyMatch(mapping -> standardTaskTypeIds.contains(mapping.getStandardTaskType().getId()))).toList();
+        }
+        if (candidates.isEmpty()) {
+            return Optional.empty();
+        }
+
+        TestCaseVersionEntity selected = hasVersionScopedConstraint
+                ? preferredVersion(candidates)
+                : visibleVersion(master, principal);
+        return selected == null ? Optional.empty() : Optional.of(new ListEntry(master, selected));
+    }
+
+    private Comparator<ListEntry> listComparator(Sort sort) {
+        Sort.Order order = sort.iterator().next();
+        Comparator<ListEntry> comparator = switch (order.getProperty()) {
+            case "caseName" -> Comparator.comparing(entry -> entry.version().getCaseName(),
+                    Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER));
+            case "updatedAt" -> Comparator.comparing(entry -> entry.version().getUpdatedAt(),
+                    Comparator.nullsLast(Comparator.naturalOrder()));
+            case "createdAt" -> Comparator.comparing(entry -> entry.version().getCreatedAt(),
+                    Comparator.nullsLast(Comparator.naturalOrder()));
+            case "caseCode" -> Comparator.comparing(entry -> entry.master().getCaseCode(),
+                    Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER));
+            default -> throw new IllegalStateException("Unsupported parsed sort: " + order.getProperty());
         };
+        if (order.isDescending()) {
+            comparator = comparator.reversed();
+        }
+        return comparator.thenComparing(entry -> entry.master().getCaseCode(),
+                Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER));
+    }
+
+    private TestCaseVersionEntity preferredVersion(List<TestCaseVersionEntity> candidates) {
+        return candidates.stream()
+                .sorted(Comparator.comparing((TestCaseVersionEntity version) ->
+                                version.isCurrentVersion() && version.getStatus() == TestCaseVersionStatus.PUBLISHED)
+                        .reversed()
+                        .thenComparing(Comparator.comparingInt(TestCaseVersionEntity::getVersionMajor).reversed())
+                        .thenComparing(Comparator.comparingInt(TestCaseVersionEntity::getVersionMinor).reversed()))
+                .findFirst().orElse(null);
+    }
+
+    private boolean versionMatches(TestCaseVersionEntity version, String term) {
+        return contains(version.getCaseName(), term) || contains(version.getTestPurpose(), term)
+                || version.getSteps().stream().anyMatch(step -> contains(step.getTitle(), term)
+                || contains(step.getContent(), term))
+                || version.getTools().stream().anyMatch(tool -> contains(tool.getTool().getName(), term));
+    }
+
+    private static boolean contains(String value, String term) {
+        return value != null && value.toLowerCase(Locale.ROOT).contains(term.toLowerCase(Locale.ROOT));
     }
 
     private Sort parseSort(String sort) {
@@ -216,6 +259,9 @@ public class TestCaseQueryService {
 
     private static boolean isAdmin(UserPrincipal principal) {
         return principal.getRoles().contains("ADMIN");
+    }
+
+    private record ListEntry(MasterTestCaseEntity master, TestCaseVersionEntity version) {
     }
 
     private static ResourceNotFoundException notFound(UUID id) {

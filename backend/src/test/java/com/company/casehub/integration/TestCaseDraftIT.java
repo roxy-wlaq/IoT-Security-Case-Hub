@@ -2,6 +2,7 @@ package com.company.casehub.integration;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 
 import com.company.casehub.auth.security.UserPrincipal;
 import com.company.casehub.category.entity.CategoryEntity;
@@ -18,6 +19,11 @@ import com.company.casehub.testcase.dto.TestCaseDetailResponse;
 import com.company.casehub.testcase.dto.UpdateDraftRequest;
 import com.company.casehub.testcase.entity.ProgressiveRole;
 import com.company.casehub.testcase.entity.SelectionMode;
+import com.company.casehub.testcase.entity.MasterTestCaseEntity;
+import com.company.casehub.testcase.entity.TestCaseStandardMappingEntity;
+import com.company.casehub.testcase.entity.TestCaseToolEntity;
+import com.company.casehub.testcase.entity.TestCaseVersionEntity;
+import com.company.casehub.testcase.entity.TestCaseVersionStatus;
 import com.company.casehub.testcase.repository.MasterTestCaseRepository;
 import com.company.casehub.testcase.repository.TestCaseStandardMappingRepository;
 import com.company.casehub.testcase.repository.TestCaseTagRepository;
@@ -140,10 +146,88 @@ class TestCaseDraftIT extends AbstractIntegrationTest {
         draftService.createDraft(request("BLE-IT-003", "Zulu", List.of()), coordinator);
         draftService.createDraft(request("BLE-IT-004", "Alpha", List.of()), coordinator);
 
-        assertThat(queryService.list(null, null, null, null, null, null, 0, 20, "caseName,asc", coordinator).content())
+        assertThat(queryService.list(null, category.getId(), null, null, null, null, 0, 20, "caseName,asc", coordinator).content())
                 .extracting("caseName").containsExactly("Alpha", "Zulu");
-        assertThat(queryService.list(null, null, null, null, null, null, 0, 20, "caseName,desc", coordinator).content())
+        assertThat(queryService.list(null, category.getId(), null, null, null, null, 0, 20, "caseName,desc", coordinator).content())
                 .extracting("caseName").containsExactly("Zulu", "Alpha");
+    }
+
+    @Test
+    void multiVersionCaseNameSortSemantics() {
+        MasterTestCaseEntity masterA = newMaster("BLE-SEM-A");
+        addVersion(masterA, 1, 0, TestCaseVersionStatus.PUBLISHED, false, "Alpha");
+        addVersion(masterA, 2, 0, TestCaseVersionStatus.PUBLISHED, true, "Zulu");
+        MasterTestCaseEntity masterB = newMaster("BLE-SEM-B");
+        addVersion(masterB, 1, 0, TestCaseVersionStatus.PUBLISHED, true, "Beta");
+
+        var ascending = queryService.list(null, category.getId(), null, null, null, null, 0, 20,
+                "caseName,asc", coordinator).content();
+        var descending = queryService.list(null, category.getId(), null, null, null, null, 0, 20,
+                "caseName,desc", coordinator).content();
+        assertThat(ascending).extracting("caseName").containsExactly("Beta", "Zulu");
+        assertThat(ascending).extracting("versionLabel", "status")
+                .containsExactly(tuple("1.0", "PUBLISHED"), tuple("2.0", "PUBLISHED"));
+        assertThat(descending).extracting("caseName").containsExactly("Zulu", "Beta");
+        assertThat(descending).extracting("versionLabel", "status")
+                .containsExactly(tuple("2.0", "PUBLISHED"), tuple("1.0", "PUBLISHED"));
+    }
+
+    @Test
+    void statusFilterReturnsMatchingVersion() {
+        TestCaseDetailResponse created = draftService.createDraft(request("BLE-SEM-STATUS", "Draft version", List.of()), coordinator);
+        MasterTestCaseEntity master = masterRepository.findById(created.id()).orElseThrow();
+        addVersion(master, 2, 0, TestCaseVersionStatus.PUBLISHED, true, "Published version");
+
+        var draft = queryService.list(null, category.getId(), null, null, null, "DRAFT", 0, 20,
+                "updatedAt,desc", coordinator).content().stream()
+                .filter(summary -> summary.id().equals(created.id())).findFirst().orElseThrow();
+        var published = queryService.list(null, category.getId(), null, null, null, "PUBLISHED", 0, 20,
+                "updatedAt,desc", coordinator).content().stream()
+                .filter(summary -> summary.id().equals(created.id())).findFirst().orElseThrow();
+        assertThat(draft).extracting("status", "versionLabel", "caseName")
+                .containsExactly("DRAFT", "1.0", "Draft version");
+        assertThat(published).extracting("status", "versionLabel", "caseName")
+                .containsExactly("PUBLISHED", "2.0", "Published version");
+    }
+
+    @Test
+    void versionScopedFiltersReturnMatchingVersion() {
+        MasterTestCaseEntity master = newMaster("BLE-SEM-FILTER");
+        TestCaseVersionEntity oldVersion = addVersion(master, 1, 0, TestCaseVersionStatus.PUBLISHED, false, "Alpha old");
+        TestCaseVersionEntity currentVersion = addVersion(master, 2, 0, TestCaseVersionStatus.PUBLISHED, true, "Zulu current");
+        ToolEntity currentTool = enabledTool("current");
+        StandardTaskTypeEntity currentStandard = enabledStandard("current");
+        attachTool(oldVersion, tool);
+        attachMapping(oldVersion, standard, "old mapping");
+        attachTool(currentVersion, currentTool);
+        attachMapping(currentVersion, currentStandard, "current mapping");
+
+        assertThat(queryService.list("alpha", category.getId(), null, null, null, null, 0, 20,
+                "updatedAt,desc", coordinator).content()).singleElement()
+                .extracting("caseName", "versionLabel").containsExactly("Alpha old", "1.0");
+        assertThat(queryService.list(null, category.getId(), null, List.of(tool.getId()), null, null, 0, 20,
+                "updatedAt,desc", coordinator).content()).singleElement()
+                .extracting("caseName", "versionLabel").containsExactly("Alpha old", "1.0");
+        assertThat(queryService.list(null, category.getId(), null, null, List.of(standard.getId()), null, 0, 20,
+                "updatedAt,desc", coordinator).content()).singleElement()
+                .extracting("caseName", "versionLabel").containsExactly("Alpha old", "1.0");
+    }
+
+    @Test
+    void summaryUpdatedAtUsesVersion() {
+        TestCaseDetailResponse created = draftService.createDraft(request("BLE-SEM-TIME", "Before", List.of()), coordinator);
+        var before = queryService.list(null, category.getId(), null, null, null, null, 0, 20,
+                "updatedAt,desc", coordinator).content().stream()
+                .filter(summary -> summary.id().equals(created.id())).findFirst().orElseThrow();
+        draftService.updateDraft(created.id(), new UpdateDraftRequest("After", "purpose", "preconditions",
+                SelectionMode.SINGLE, false, null, null, null, List.of(), List.of(tag.getId()), List.of(tool.getId()),
+                List.of(new StandardMappingRequest(standard.getId(), "note"))), coordinator);
+        var after = queryService.list(null, category.getId(), null, null, null, null, 0, 20,
+                "updatedAt,desc", coordinator).content().stream()
+                .filter(summary -> summary.id().equals(created.id())).findFirst().orElseThrow();
+        TestCaseVersionEntity persisted = versionRepository.findById(created.visibleVersion().id()).orElseThrow();
+        assertThat(after.updatedAt()).isEqualTo(persisted.getUpdatedAt());
+        assertThat(after.updatedAt()).isAfter(before.updatedAt());
     }
 
     @Test
@@ -209,5 +293,45 @@ class TestCaseDraftIT extends AbstractIntegrationTest {
         entity.setName("IT Standard " + label);
         entity.setType("STANDARD");
         return standardRepository.save(entity);
+    }
+
+    private MasterTestCaseEntity newMaster(String code) {
+        MasterTestCaseEntity master = new MasterTestCaseEntity();
+        master.setCaseCode(code);
+        master.setCategory(category);
+        master.setCreatedBy(user);
+        return masterRepository.saveAndFlush(master);
+    }
+
+    private TestCaseVersionEntity addVersion(MasterTestCaseEntity master, int major, int minor,
+                                               TestCaseVersionStatus status, boolean current, String caseName) {
+        TestCaseVersionEntity version = new TestCaseVersionEntity();
+        version.setMasterTestCase(master);
+        version.setVersionMajor(major);
+        version.setVersionMinor(minor);
+        version.setStatus(status);
+        version.setCurrentVersion(current);
+        version.setCaseName(caseName);
+        version.setSelectionMode(SelectionMode.SINGLE);
+        version.setEvidenceRequired(false);
+        version.setCreatedBy(user);
+        version.setRevisionClosed(status != TestCaseVersionStatus.DRAFT);
+        return versionRepository.saveAndFlush(version);
+    }
+
+    private void attachTool(TestCaseVersionEntity version, ToolEntity referencedTool) {
+        TestCaseToolEntity relation = new TestCaseToolEntity();
+        relation.setTestCaseVersion(version);
+        relation.setTool(referencedTool);
+        relation.setSortOrder(0);
+        caseToolRepository.saveAndFlush(relation);
+    }
+
+    private void attachMapping(TestCaseVersionEntity version, StandardTaskTypeEntity referencedStandard, String note) {
+        TestCaseStandardMappingEntity relation = new TestCaseStandardMappingEntity();
+        relation.setTestCaseVersion(version);
+        relation.setStandardTaskType(referencedStandard);
+        relation.setMappingNote(note);
+        mappingRepository.saveAndFlush(relation);
     }
 }

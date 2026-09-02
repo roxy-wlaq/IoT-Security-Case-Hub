@@ -32,6 +32,15 @@ Query 参数：
 
 `caseName` 按版本名称排序。排序请求示例：`sort=caseName,asc`、`sort=caseName,desc`。PostgreSQL 集成测试实际校验两种方向的返回顺序。
 
+### List Version Selection Semantics
+
+列表中的每一个 Master 在当前请求条件下先确定且只确定一个 **List Version**；该 Version 就是最终用于构造 `TestCaseSummaryResponse` 的版本。列表的版本可见性规则为：普通用户可见已发布版本和本人创建的 Draft，管理员可见所有版本。
+
+- `status`、版本侧的 `q`（版本名称、测试目的、步骤或工具）、`toolIds` 和 `standardTaskTypeIds` 先筛选可见 Version；没有匹配 Version 的 Master 不进入结果。
+- 对版本侧条件命中的 Master，从匹配集合中选择当前已发布 Version；否则选择版本号最高的匹配 Version。没有版本侧条件时，选择当前已发布 Version；若不存在，则选择当前用户可见的最新 Draft（管理员再回退到最新可见版本）。
+- 选定的同一个 List Version 同时提供 Summary 的 `caseName`、`status`、`versionLabel`、`updatedAt`，并作为 `sort=caseName` 和 `sort=updatedAt` 的排序值。排序不会使用所有 Version 的 `MIN(caseName)` 或其他聚合值替代展示版本。
+- `categoryId`、`tagIds`、Master 的 `caseCode` 与 Master 标签侧的 `q` 属于 Master 级条件；它们只决定 Master 是否候选，不改变上述 List Version 选择语义。
+
 响应 `200`：
 
 ```json
