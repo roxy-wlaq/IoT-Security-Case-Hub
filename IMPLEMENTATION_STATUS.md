@@ -180,6 +180,23 @@
 - Frontend：`npm run typecheck`、`npm run lint`、`npm run test`（9 files / 39 tests）、`npm run build` 均通过；仅保留既有 Vite bundle size warning。
 - `docs/phase6-api-contract.md` 已记录最终实际接口及 List Version Selection Semantics；未修改前端 API contract。
 
+### Phase 6 Query Architecture Final Fix — Verified（2026-09-03）
+
+> 本轮仅闭环 Phase 6 列表查询架构的 **HIGH ×2**；不启动 Phase 7，不修改数据库 Schema 或前端源码。实现修复 SHA：`9d53a5b`；文档随后单独提交。
+
+| 优先级 | 发现 | 修复与证据 |
+|--------|------|------------|
+| HIGH | `q` 未严格实现 Master/Version OR，可能错误要求选中的 Version 自身也匹配 Master 级命中词，或由不同 Version 分别满足 `q` 与版本过滤 | PostgreSQL 候选谓词固定为 `MasterMatch(caseCode/tag name) OR same-row VersionMatch(caseName/testPurpose/step/tool)`。Master 命中时，候选 Version 无需再匹配 `q`；但 `status`、`toolIds`、`standardTaskTypeIds` 与 VersionMatch 都约束同一个候选 Version 行。最终 Summary 的 `caseName`、`status`、`versionLabel`、`updatedAt` 及版本侧排序均使用选中的同一个 List Version。`TestCaseDraftIT` 在 PostgreSQL 16.6 上覆盖 Master 命中不限制 Draft、Version `q`/status 同行、tool/standard 同行及多版本排序字段一致性。 |
+| HIGH | 列表在 Java 内全量加载并过滤、排序、分页、计数，无法保证数据库分页和 count 语义一致 | 新增 PostgreSQL 查询仓库，在数据库内完成候选过滤、每 Master 一个 List Version、排序、`LIMIT/OFFSET` 分页和 `COUNT(*)`；Service 只批量装载页面返回的 Master/Version ID，并按数据库行顺序构造 Summary，不再调用 `masterRepository.findAll()`。`databasePaginationIsStable` 验证相邻页面无重叠、顺序与总数稳定。 |
+
+**最终契约与验证证据：**
+
+- **Count Contract：** page SQL 与 count SQL 由同一个 `candidate_versions` / `selected_versions` CTE 字符串构造，共享全部可见性、`status`、`q`、`toolIds`、`standardTaskTypeIds` 条件，也共享 Master 级 `categoryId` 与 `tagIds`；count 是同一候选和 List Version 选择语义产生的 Master 数量。
+- **Stable Pagination Contract：** `caseName`、`updatedAt`、`createdAt`、`caseCode` 的每一种升/降序最终都追加唯一且方向固定的 `selected_versions.master_id ASC` tie-breaker，然后才执行数据库 `LIMIT/OFFSET`。
+- Backend：`mvn clean test` 通过，Surefire **129 tests / 0 failures / 0 errors / 0 skipped**；`mvn verify` 通过并再次执行 129 个 Surefire tests，Failsafe **43 PostgreSQL IT / 0 failures / 0 errors / 0 skipped**，其中 `TestCaseDraftIT` **17 / 0 / 0 / 0**。
+- PostgreSQL/Flyway：实际测试数据库为 **PostgreSQL 16.6**；日志为 `Successfully applied 7 migrations ... now at version v007`。Migration 清单仅 V001–V007，**V008 未创建**，migration 文件无修改。
+- Frontend：`npm run typecheck`、`npm run lint`、`npm run test`、`npm run build` 均通过；Vitest **9 files / 39 tests**，build 转换 3203 modules，仅有既存的 chunk >500 kB warning；`frontend/src` 无变更。
+
 ---
 
 ## Phase 0–3 Code Review Findings — Fixed (2026-09-02)

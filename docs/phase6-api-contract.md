@@ -36,9 +36,11 @@ Query 参数：
 
 列表中的每一个 Master 在当前请求条件下先确定且只确定一个 **List Version**；该 Version 就是最终用于构造 `TestCaseSummaryResponse` 的版本。列表的版本可见性规则为：普通用户可见已发布版本和本人创建的 Draft，管理员可见所有版本。
 
-- `status`、版本侧的 `q`（版本名称、测试目的、步骤或工具）、`toolIds` 和 `standardTaskTypeIds` 先筛选可见 Version；没有匹配 Version 的 Master 不进入结果。
-- 对版本侧条件命中的 Master，从匹配集合中选择当前已发布 Version；否则选择版本号最高的匹配 Version。没有版本侧条件时，选择当前已发布 Version；若不存在，则选择当前用户可见的最新 Draft（管理员再回退到最新可见版本）。
-- 选定的同一个 List Version 同时提供 Summary 的 `caseName`、`status`、`versionLabel`、`updatedAt`，并作为 `sort=caseName` 和 `sort=updatedAt` 的排序值。排序不会使用所有 Version 的 `MIN(caseName)` 或其他聚合值替代展示版本。
+- `q` 的语义严格为 `MasterMatch OR VersionMatch`。`MasterMatch` 匹配 Master 的 `caseCode` 或标签名称；`VersionMatch` 匹配某一个 Version 的版本名称、测试目的、步骤标题/内容或工具名称。
+- 当 `MasterMatch` 成立时，候选/选中的 Version **不要求**自身再匹配 `q`；例如 Master 编码匹配 `q=BLE` 时，`status=DRAFT` 可以选中名称不含 `BLE` 的 Draft。
+- `status`、`toolIds`、`standardTaskTypeIds` 始终与 `VersionMatch` 一样作用于同一个候选 Version 行，不能由不同 Version 分别满足。若 `MasterMatch` 不成立，则同一个 Version 必须同时满足 `VersionMatch` 及这些已提供的版本级过滤条件；没有这种候选 Version 的 Master 不进入结果。
+- 对每个 Master，在上述可见性与请求条件形成的候选 Version 集合中优先选择当前已发布 Version；若候选集合中不存在当前已发布 Version，则选择版本号最高的候选 Version，并以 Version ID 确定性打破同版本号并列。
+- 选定的同一个 List Version 同时提供 Summary 的 `caseName`、`status`、`versionLabel`、`updatedAt`；版本侧排序也使用这一个 List Version 的值，包括 `sort=caseName`、`sort=updatedAt` 和 `sort=createdAt`。排序不会使用所有 Version 的 `MIN(caseName)` 或其他聚合值替代展示版本。
 - `categoryId`、`tagIds`、Master 的 `caseCode` 与 Master 标签侧的 `q` 属于 Master 级条件；它们只决定 Master 是否候选，不改变上述 List Version 选择语义。
 
 响应 `200`：
