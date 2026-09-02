@@ -15,6 +15,7 @@ import { ToolPage } from '@/features/dictionary/pages/ToolPage';
 import { CapabilityAdminPage } from '@/features/capability/pages/CapabilityAdminPage';
 import { TestCaseDraftPage } from '@/features/testcase/pages/TestCaseDraftPage';
 import { TestCaseLibraryPage } from '@/features/testcase/pages/TestCaseLibraryPage';
+import { TestCaseDetailPage } from '@/features/testcase/pages/TestCaseDetailPage';
 
 /**
  * 已实现模块的页面映射（Phase 4 基础字典 / Phase 5 能力库）。
@@ -43,7 +44,8 @@ const protectedRoutes = [
     };
   }),
   { path: 'test-cases/new', element: <RouteGuard permission="test_case:draft_create"><TestCaseDraftPage /></RouteGuard> },
-  { path: 'test-cases/:masterId', element: <RouteGuard permission="test_case:read"><TestCaseDraftPage /></RouteGuard> },
+  { path: 'test-cases/:masterId', element: <RouteGuard permission="test_case:read"><TestCaseDetailPage /></RouteGuard> },
+  { path: 'test-cases/:masterId/edit', element: <RouteGuard permission="test_case:read"><TestCaseDraftPage /></RouteGuard> },
   { path: '403', element: <Forbidden /> },
   { path: '*', element: <NotFound /> },
 ];

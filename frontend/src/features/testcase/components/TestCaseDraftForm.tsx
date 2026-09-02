@@ -24,9 +24,16 @@ export function TestCaseDraftForm({ initialValues, isCreate = false, readOnly = 
     resolver: zodResolver(testCaseDraftSchema), defaultValues: { ...TEST_CASE_DRAFT_DEFAULTS, ...initialValues }, mode: 'onSubmit',
   });
   const { fields, append, remove, move } = useFieldArray({ control, name: 'steps' });
-  useEffect(() => { reset({ ...TEST_CASE_DRAFT_DEFAULTS, ...initialValues }); }, [initialValues, reset]);
+  const { remove: removeMapping, replace: replaceMappings } = useFieldArray({ control, name: 'standardMappings' });
+  useEffect(() => {
+    const nextValues = { ...TEST_CASE_DRAFT_DEFAULTS, ...initialValues };
+    reset(nextValues);
+    replaceMappings(nextValues.standardMappings);
+  }, [initialValues, reset, replaceMappings]);
   const selectionMode = watch('selectionMode');
   const evidenceRequired = watch('evidenceRequired');
+  const watchedStandardMappings = watch('standardMappings') ?? [];
+  const standardMappings = watchedStandardMappings.length > 0 ? watchedStandardMappings : (initialValues?.standardMappings ?? []);
   const disabled = readOnly || pending;
 
   return (
@@ -48,6 +55,9 @@ export function TestCaseDraftForm({ initialValues, isCreate = false, readOnly = 
       <Form.Item label="需要证据"><Switch checked={evidenceRequired} onChange={(value) => setValue('evidenceRequired', value)} disabled={disabled} /></Form.Item>
       <Form.Item label="证据要求"><Input.TextArea {...register('evidenceRequirement')} rows={2} disabled={disabled} /></Form.Item>
       <Form.Item label="备注要求"><Input.TextArea {...register('remarkRequirement')} rows={2} disabled={disabled} /></Form.Item>
+      <Form.Item label="渐进角色">
+        <Select value={watch('progressiveRole') ?? undefined} allowClear placeholder="None" options={[{ value: 'ENTRY', label: 'ENTRY' }, { value: 'NORMAL', label: 'NORMAL' }]} onChange={(value) => setValue('progressiveRole', value ?? null, { shouldValidate: true })} disabled={disabled} />
+      </Form.Item>
       <Form.Item label="步骤">
         {fields.map((field, index) => <Space key={field.id} direction="vertical" style={{ display: 'flex', marginBottom: 12 }}>
           <Input placeholder={`步骤 ${index + 1} 标题`} {...register(`steps.${index}.title`)} disabled={disabled} />
@@ -59,7 +69,14 @@ export function TestCaseDraftForm({ initialValues, isCreate = false, readOnly = 
       </Form.Item>
       <Form.Item label="标签"><Select mode="multiple" options={tagOptions} value={watch('tagIds')} onChange={(value) => setValue('tagIds', value)} disabled={disabled} /></Form.Item>
       <Form.Item label="工具"><Select mode="multiple" options={toolOptions} value={watch('toolIds')} onChange={(value) => setValue('toolIds', value)} disabled={disabled} /></Form.Item>
-      <Form.Item label="标准/任务类型"><Select mode="multiple" options={standardOptions} value={watch('standardMappings').map((item) => item.standardTaskTypeId)} onChange={(values: string[]) => setValue('standardMappings', values.map((value) => ({ standardTaskTypeId: value })))} disabled={disabled} /></Form.Item>
+      <Form.Item label="标准/任务类型"><Select mode="multiple" options={standardOptions} value={standardMappings.map((item) => item.standardTaskTypeId)} onChange={(values: string[]) => {
+        const current = standardMappings;
+        setValue('standardMappings', values.map((value) => ({ standardTaskTypeId: value, mappingNote: current.find((item) => item.standardTaskTypeId === value)?.mappingNote ?? '' })), { shouldDirty: true });
+      }} disabled={disabled} /></Form.Item>
+      {standardMappings.map((mapping, index) => <Space key={`${mapping.standardTaskTypeId}-${index}`} style={{ display: 'flex', marginBottom: 8 }}>
+        <Input placeholder="映射备注" defaultValue={mapping.mappingNote ?? ''} {...register(`standardMappings.${index}.mappingNote`)} disabled={disabled} />
+        {!disabled ? <Button onClick={() => removeMapping(index)}>移除映射</Button> : null}
+      </Space>)}
       {!readOnly ? <Button type="primary" htmlType="submit" loading={pending}>保存 Draft</Button> : null}
     </Form>
   );
