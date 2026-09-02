@@ -7,14 +7,15 @@
 
 ## Current Phase
 
-**Phase 0–5 已完成**，代码已集成到 `dev/v1-implementation` 分支。
+**Phase 0–6 已完成**，代码已集成到 `dev/v1-implementation` 分支。
 
-- 实现状态：`Implementation Complete / Static + Partial Runtime Verification`
+- 实现状态：`Implementation Complete / Unit + Integration + Frontend Verification`
 - **Round 1（2026-09-02 早）：** 修复 **8 项** Phase 0–3 Code Review 发现（HIGH-01/02/03、MEDIUM-01/02/03/04、LOW-01），每 HIGH 增加 Regression Test，并补齐前端基础测试（MEDIUM-01）。（注：此前内部记录曾误写为"9 项"，实际表格为 8 项，本轮已校正。）
 - **Round 2（2026-09-02 晚）：** 修复 **8 项** Review Round 2 发现（见下方独立章节）—— LoginAttempt 回归、HTTP overlay profile、SessionExpiry 双重注册/统一错误、SessionRegistry 生命周期、Session Fixation、文档与 must_change_password 语义。
 - **Round 3（2026-09-02 凌晨）：** 最后小范围修复 **3 项**（HIGH×1、MEDIUM×1、LOW×1）—— 默认 Docker HTTP 与 Secure Cookie 冲突（HIGH-03 真正闭环）、登录后 SessionAuthenticationStrategy 顺序、加强 SessionFixationIT。不开发 Phase 4。
 - **Phase 4 + Phase 5 Wave（2026-09-02）：** 双 Agent 并行实现基础字典与能力库（见下方 Phase 4 / Phase 5 章节），Lead 集成 Router/Sidebar 并全量验证。不开始 Phase 6。
 - 技术栈保持冻结（Java 21 / Spring Boot 3 / Spring Security / Server-side Session / CSRF / PostgreSQL 16 / Flyway / React+TS / TanStack Query / Ant Design / Nginx / Docker Compose）。未引入 JWT，未关闭 CSRF，未重新设计架构。
+- **Phase 6（2026-09-02）：** 完成 Master Test Case 基础：V006 数据模型、Draft 创建/编辑、可见性查询、分页搜索、版本历史、前端测试库与 Draft 编辑器；严格未实现 Phase 7 生命周期及后续 DAG/Project/Generation/Storage。
 
 ---
 
@@ -118,6 +119,28 @@
 > - 未运行：`mvn verify` 的 `*IT`（Testcontainers PostgreSQL 在本沙箱不可达，沿用 Round 3 结论，IT 维护 Pending，不标 PASS）；未搭建完整 Docker 运行时做浏览器端到端验证。
 > - 前端 RBAC 测试基座：`common/MethodSecurityTestConfig`（@WebMvcTest 切片内恢复 @EnableMethodSecurity；Lead 预置共享，避免两个 Agent 各写一份）。POST/PUT 测试必须 `.with(csrf())`。
 > - Migration 备注：V003 由 `V003__dictionary_tables.sql` 重命名为 `V003__reference_catalog.sql`（Lead 统一管理版本命名）。**已按旧 V003 建过库的开发库需 `flyway repair` 或重建 volume**；全新环境无影响。
+
+### Phase 6 — Master Test Case 基础 ✅ Completed（2026-09-02）
+
+| 项目 | 状态 | 说明 |
+|------|------|------|
+| V006 Migration | ✅ | 新增 `master_test_cases`、`test_case_versions`、`test_steps`、Master Tags、Version Tools/Standard Mappings、Version Attachment metadata；V001–V005 未修改 |
+| Backend | ✅ | `testcase` 模块实现 Master/Version/Step/Relation entities、DTO、repositories、Draft service、visibility-aware query service、REST controller |
+| Draft API | ✅ | 创建 `DRAFT 1.0`、全量编辑 Draft、步骤顺序重排、关系去重、Category/Tag/Tool/Standard 引用校验；Published/Review/Deprecated 不可经 Draft API 修改 |
+| Query API | ✅ | `/api/v1/test-cases` 分页搜索、详情、版本历史、版本详情；实现 current published / own Draft / ADMIN 可见性与排序白名单 |
+| RBAC | ✅ | 创建要求 `test_case:draft_create`；编辑要求 `test_case:draft_edit` 且资源为 Draft 所有者或 ADMIN；控制器不暴露 JPA Entity |
+| Frontend | ✅ | `/test-cases` 测试库、`/test-cases/new` 创建 Draft、`/test-cases/:masterId` Draft 查看/编辑；共享类型、API、Query key、RHF/Zod 表单与 Query invalidation |
+| Phase boundary | ✅ | 未实现 Publish、Return、Reject、Deprecated、Review Workflow、Decision Point、DAG、Project、Generation、Execution、Evidence、StorageService |
+| Tests | ✅ | Backend `mvn clean test` 与 Frontend `npm test -- --run` 的最终结果记录于下方；V006 静态 migration contract、Draft service、visibility、RBAC、API/form 测试已加入 |
+
+> **Phase 6 文档依据说明：** 用户任务列出的 `IoT-Security-Case-Hub_API-Design_V1.0.md` 与 `IoT-Security-Case-Hub_Frontend-Architecture_V1.0.md` 在当前仓库中不存在；本轮按 Final Technical Review、Database/Data Model、Backend/Security/Testing 文档及仓库中的冻结 `IoT-Security-Case-Hub_Phase6-API-Contract_V1.0.md` 实施。
+
+> **Phase 6 最终验证（2026-09-02，实际执行结果）：**
+> - Backend：`mvn -q clean test` 通过；`mvn -q verify` 通过，Testcontainers PostgreSQL 实际执行 18 个集成测试，0 failures / 0 errors；日志确认 Flyway V001–V006 全部成功迁移。
+> - Frontend：`npm test -- --run` 通过（8 个 test files / 30 tests）；`npm run typecheck`、`npm run lint`、`npm run build` 均通过。Vite 仅提示 bundle 大小 warning，不影响构建。
+> - Deployment config：`cp deploy/.env.example deploy/.env && docker compose -f deploy/docker-compose.yml config` 通过；临时 `.env` 未纳入提交。
+> - Stability hardening：集成测试基类增加 `@DirtiesContext(AFTER_CLASS)`，避免 Testcontainers 生命周期与 Spring Context 缓存复用失效连接；注销流程显式移除 SessionRegistry 条目。
+> - 未执行：完整 Docker 服务启动与浏览器端到端流程；本轮未实现 Phase 7 生命周期及后续模块。
 
 ---
 

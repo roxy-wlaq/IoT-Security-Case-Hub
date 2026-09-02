@@ -22,6 +22,7 @@ import org.springframework.security.authentication.DisabledException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
+import org.springframework.security.core.session.SessionRegistry;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.authentication.session.SessionAuthenticationStrategy;
@@ -49,6 +50,7 @@ public class AuthenticationService {
     private final UserRepository userRepository;
     private final UserDetailsServiceImpl userDetailsService;
     private final SessionAuthenticationStrategy sessionAuthenticationStrategy;
+    private final SessionRegistry sessionRegistry;
 
     public CurrentUserResponse login(LoginRequest request, HttpServletRequest httpRequest,
                                      HttpServletResponse httpResponse) {
@@ -98,6 +100,7 @@ public class AuthenticationService {
         securityContextRepository.saveContext(SecurityContextHolder.createEmptyContext(), httpRequest, httpResponse);
         HttpSession session = httpRequest.getSession(false);
         if (session != null) {
+            sessionRegistry.removeSessionInformation(session.getId());
             session.invalidate();
         }
         Cookie cookie = new Cookie("XSRF-TOKEN", null);
