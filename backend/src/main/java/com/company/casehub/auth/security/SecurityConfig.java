@@ -7,6 +7,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -36,9 +37,13 @@ import org.springframework.security.web.csrf.CsrfTokenRepository;
  *  - Stateless JSON 401/403 responses (no login-page redirect).
  *  - Session-expiry enforcement via SessionExpiryFilter (HIGH-01): an expired
  *    session (admin disable / password reset) is invalidated on the next request.
+ *  - Method security: Phase 4/5 admin endpoints guard themselves with
+ *    {@code @PreAuthorize("hasAuthority('…:manage')")}; user authorities are the
+ *    effective permission codes loaded by {@link UserPrincipal}.
  */
 @Configuration
 @EnableWebSecurity
+@EnableMethodSecurity
 @RequiredArgsConstructor
 public class SecurityConfig {
 
