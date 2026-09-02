@@ -174,6 +174,10 @@ public class TestCaseDraftService {
     }
 
     private void replaceSteps(TestCaseVersionEntity version, List<StepRequest> requests) {
+        if (version.getId() != null) {
+            stepRepository.deleteByTestCaseVersionId(version.getId());
+            stepRepository.flush();
+        }
         version.getSteps().clear();
         int sequence = 1;
         for (StepRequest request : safeList(requests)) {
@@ -190,8 +194,14 @@ public class TestCaseDraftService {
     }
 
     private void replaceTags(MasterTestCaseEntity master, List<UUID> ids) {
+        if (master.getId() != null) {
+            caseTagRepository.deleteByMasterTestCaseId(master.getId());
+            caseTagRepository.flush();
+        }
         master.getTags().clear();
-        for (TagEntity tag : findAllRequired(ids, tagRepository::findAllById, ErrorCode.TEST_CASE_TAG_INVALID, "tag")) {
+        for (TagEntity tag : findAllRequired(ids,
+                values -> tagRepository.findAllById(values).stream().filter(TagEntity::isEnabled).toList(),
+                ErrorCode.TEST_CASE_TAG_INVALID, "tag")) {
             TestCaseTagEntity relation = new TestCaseTagEntity();
             relation.setMasterTestCase(master);
             relation.setTag(tag);
@@ -200,9 +210,15 @@ public class TestCaseDraftService {
     }
 
     private void replaceTools(TestCaseVersionEntity version, List<UUID> ids) {
+        if (version.getId() != null) {
+            caseToolRepository.deleteByTestCaseVersionId(version.getId());
+            caseToolRepository.flush();
+        }
         version.getTools().clear();
         int sortOrder = 0;
-        for (ToolEntity tool : findAllRequired(ids, toolRepository::findAllById, ErrorCode.TEST_CASE_TOOL_INVALID, "tool")) {
+        for (ToolEntity tool : findAllRequired(ids,
+                values -> toolRepository.findAllById(values).stream().filter(ToolEntity::isEnabled).toList(),
+                ErrorCode.TEST_CASE_TOOL_INVALID, "tool")) {
             TestCaseToolEntity relation = new TestCaseToolEntity();
             relation.setTestCaseVersion(version);
             relation.setTool(tool);
@@ -212,6 +228,10 @@ public class TestCaseDraftService {
     }
 
     private void replaceMappings(TestCaseVersionEntity version, List<StandardMappingRequest> requests) {
+        if (version.getId() != null) {
+            mappingRepository.deleteByTestCaseVersionId(version.getId());
+            mappingRepository.flush();
+        }
         version.getStandardMappings().clear();
         Set<UUID> seen = new LinkedHashSet<>();
         for (StandardMappingRequest request : safeList(requests)) {
@@ -219,8 +239,9 @@ public class TestCaseDraftService {
                 continue;
             }
             StandardTaskTypeEntity standard = standardRepository.findById(request.standardTaskTypeId())
+                    .filter(StandardTaskTypeEntity::isEnabled)
                     .orElseThrow(() -> new ValidationException(ErrorCode.TEST_CASE_STANDARD_INVALID,
-                            "Standard/Task Type does not exist: " + request.standardTaskTypeId()));
+                            "Standard/Task Type does not exist or is disabled: " + request.standardTaskTypeId()));
             TestCaseStandardMappingEntity relation = new TestCaseStandardMappingEntity();
             relation.setTestCaseVersion(version);
             relation.setStandardTaskType(standard);

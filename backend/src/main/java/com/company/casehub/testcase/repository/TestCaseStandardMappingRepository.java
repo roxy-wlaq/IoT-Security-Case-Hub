@@ -6,4 +6,5 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface TestCaseStandardMappingRepository extends JpaRepository<TestCaseStandardMappingEntity, UUID> {
     void deleteByTestCaseVersionId(UUID versionId);
+    java.util.List<TestCaseStandardMappingEntity> findByTestCaseVersionId(UUID versionId);
 }

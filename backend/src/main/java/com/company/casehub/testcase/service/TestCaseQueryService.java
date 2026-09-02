@@ -50,10 +50,13 @@ public class TestCaseQueryService {
         if (size < 1 || size > 100) {
             throw new ValidationException(ErrorCode.VALIDATION_FAILED, "Page size must be between 1 and 100.");
         }
-        Pageable pageable = PageRequest.of(Math.max(page, 0), size, parseSort(sort));
+        Sort requestedSort = parseSort(sort);
+        boolean sortByVersionName = requestedSort.getOrderFor("caseName") != null;
+        Pageable pageable = PageRequest.of(Math.max(page, 0), size,
+                sortByVersionName ? Sort.unsorted() : requestedSort);
         TestCaseVersionStatus requestedStatus = parseStatus(status);
         Page<MasterTestCaseEntity> masters = masterRepository.findAll(specification(q, categoryId, tagIds, toolIds,
-                standardTaskTypeIds, requestedStatus, principal), pageable);
+                standardTaskTypeIds, requestedStatus, requestedSort, principal), pageable);
         Page<TestCaseSummaryResponse> response = masters.map(master -> {
             TestCaseVersionEntity visible = visibleVersion(master, principal);
             return TestCaseSummaryResponse.from(master, visible);
@@ -116,7 +119,8 @@ public class TestCaseQueryService {
 
     private Specification<MasterTestCaseEntity> specification(String q, UUID categoryId, List<UUID> tagIds,
                                                                List<UUID> toolIds, List<UUID> standardIds,
-                                                               TestCaseVersionStatus status, UserPrincipal principal) {
+                                                               TestCaseVersionStatus status, Sort sort,
+                                                               UserPrincipal principal) {
         return (root, query, cb) -> {
             query.distinct(true);
             var versions = root.join("versions", JoinType.LEFT);
@@ -149,6 +153,13 @@ public class TestCaseQueryService {
             if (standardIds != null && !standardIds.isEmpty()) {
                 var mappings = versions.join("standardMappings", JoinType.LEFT).join("standardTaskType", JoinType.LEFT);
                 predicates.add(mappings.get("id").in(standardIds.stream().distinct().toList()));
+            }
+            Sort.Order caseNameOrder = sort.getOrderFor("caseName");
+            if (caseNameOrder != null) {
+                query.distinct(false);
+                query.groupBy(root);
+                var versionName = cb.min(versions.get("caseName"));
+                query.orderBy(caseNameOrder.isAscending() ? cb.asc(versionName) : cb.desc(versionName), cb.asc(root.get("caseCode")));
             }
             return cb.and(predicates.toArray(Predicate[]::new));
         };

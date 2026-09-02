@@ -6,4 +6,5 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface TestCaseTagRepository extends JpaRepository<TestCaseTagEntity, UUID> {
     void deleteByMasterTestCaseId(UUID masterId);
+    java.util.List<TestCaseTagEntity> findByMasterTestCaseId(UUID masterId);
 }

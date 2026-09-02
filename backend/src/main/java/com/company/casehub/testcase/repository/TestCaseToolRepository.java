@@ -6,4 +6,5 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface TestCaseToolRepository extends JpaRepository<TestCaseToolEntity, UUID> {
     void deleteByTestCaseVersionId(UUID versionId);
+    java.util.List<TestCaseToolEntity> findByTestCaseVersionId(UUID versionId);
 }
