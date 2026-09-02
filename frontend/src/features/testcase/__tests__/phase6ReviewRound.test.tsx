@@ -5,7 +5,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { TestCaseDetailPage } from '@/features/testcase/pages/TestCaseDetailPage';
 import { TestCaseLibraryPage } from '@/features/testcase/pages/TestCaseLibraryPage';
 import { TestCaseDraftForm } from '@/features/testcase/components/TestCaseDraftForm';
-import { useTestCase, useTestCaseVersion, useTestCaseVersions, useTestCases } from '@/features/testcase/hooks/useTestCases';
+import { useTestCase, useTestCaseVersion, useTestCaseVersions, useTestCases, useReviewRecords, useContributors } from '@/features/testcase/hooks/useTestCases';
 
 Object.defineProperty(window, 'matchMedia', {
   writable: true,
@@ -15,12 +15,25 @@ Object.defineProperty(window, 'matchMedia', {
 vi.mock('@/features/auth/hooks/useCurrentUser', () => ({
   useCurrentUser: vi.fn(() => ({ data: { permissions: ['test_case:draft_create'], roles: [] } })),
 }));
-vi.mock('@/features/testcase/hooks/useTestCases', () => ({
-  useTestCases: vi.fn(),
-  useTestCase: vi.fn(),
-  useTestCaseVersions: vi.fn(),
-  useTestCaseVersion: vi.fn(),
-}));
+vi.mock('@/features/testcase/hooks/useTestCases', () => {
+  const noopMutation = () => ({ isPending: false, mutate: vi.fn(), mutateAsync: vi.fn() });
+  return {
+    useTestCases: vi.fn(),
+    useTestCase: vi.fn(),
+    useTestCaseVersions: vi.fn(),
+    useTestCaseVersion: vi.fn(),
+    useReviewRecords: vi.fn(),
+    useContributors: vi.fn(),
+    useSubmitReview: vi.fn(noopMutation),
+    usePublish: vi.fn(noopMutation),
+    useReturnReview: vi.fn(noopMutation),
+    useReject: vi.fn(noopMutation),
+    useDeprecate: vi.fn(noopMutation),
+    useCreateRevision: vi.fn(noopMutation),
+    useAddContributor: vi.fn(noopMutation),
+    useRemoveContributor: vi.fn(noopMutation),
+  };
+});
 vi.mock('@/features/dictionary/hooks/useCategories', () => ({ useCategories: vi.fn(() => ({ data: [] })) }));
 vi.mock('@/features/dictionary/hooks/useTags', () => ({ useTags: vi.fn(() => ({ data: [] })) }));
 vi.mock('@/features/dictionary/hooks/useTools', () => ({ useTools: vi.fn(() => ({ data: [] })) }));
@@ -48,6 +61,8 @@ describe('Phase 6 review round frontend behavior', () => {
     vi.mocked(useTestCase).mockReturnValue({ data: detail, isLoading: false, isError: false } as never);
     vi.mocked(useTestCaseVersions).mockReturnValue({ data: detail.versions, isLoading: false } as never);
     vi.mocked(useTestCaseVersion).mockReturnValue({ data: detail.visibleVersion, isLoading: false } as never);
+    vi.mocked(useReviewRecords).mockReturnValue({ data: [], isLoading: false } as never);
+    vi.mocked(useContributors).mockReturnValue({ data: [], isLoading: false } as never);
   });
 
   it('libraryFilterState', async () => {

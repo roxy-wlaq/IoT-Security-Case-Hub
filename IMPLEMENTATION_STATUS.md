@@ -7,7 +7,7 @@
 
 ## Current Phase
 
-**Phase 0–6 已完成**，代码已集成到 `dev/v1-implementation` 分支。
+**Phase 0–7 已完成**，代码已集成到 `dev/v1-implementation` 分支。
 
 - 实现状态：`Implementation Complete / Unit + Integration + Frontend Verification`
 - **Round 1（2026-09-02 早）：** 修复 **8 项** Phase 0–3 Code Review 发现（HIGH-01/02/03、MEDIUM-01/02/03/04、LOW-01），每 HIGH 增加 Regression Test，并补齐前端基础测试（MEDIUM-01）。（注：此前内部记录曾误写为"9 项"，实际表格为 8 项，本轮已校正。）
@@ -16,6 +16,7 @@
 - **Phase 4 + Phase 5 Wave（2026-09-02）：** 双 Agent 并行实现基础字典与能力库（见下方 Phase 4 / Phase 5 章节），Lead 集成 Router/Sidebar 并全量验证。不开始 Phase 6。
 - 技术栈保持冻结（Java 21 / Spring Boot 3 / Spring Security / Server-side Session / CSRF / PostgreSQL 16 / Flyway / React+TS / TanStack Query / Ant Design / Nginx / Docker Compose）。未引入 JWT，未关闭 CSRF，未重新设计架构。
 - **Phase 6（2026-09-02）：** 完成 Master Test Case 基础：V006 数据模型、Draft 创建/编辑、可见性查询、分页搜索、版本历史、前端测试库与 Draft 编辑器；严格未实现 Phase 7 生命周期及后续 DAG/Project/Generation/Storage。
+- **Phase 7（2026-09-03）：** 完成 Test Case Lifecycle：V008 迁移（`test_case_review_records` / `revision_contributors`）；DRAFT→REVIEW→PUBLISHED 状态机、Return→DRAFT、Reject 保持 REVIEW + `revision_closed=true`（**无 REJECTED 状态**）、Deprecate→DEPRECATED、Create Revision Draft；Published Immutable（Service 层硬断言，非仅 DB CHECK）、单一当前发布版本（部分唯一索引 `uq_test_case_current_version`）、服务端控制版本号（major=源 major，minor=同 major MAX+1）、资源级 RBAC（owner/contributor/admin）+ 权限码双闸门、AllowedActions 9 字段、latestReviewAction；前端详情页操作栏 / 评审历史 Timeline / 贡献者管理 / 已驳回标签。后端 surefire **176**、failsafe **58** 全绿；前端 **51** 测试全绿。
 
 ---
 
@@ -196,6 +197,33 @@
 - Backend：`mvn clean test` 通过，Surefire **129 tests / 0 failures / 0 errors / 0 skipped**；`mvn verify` 通过并再次执行 129 个 Surefire tests，Failsafe **43 PostgreSQL IT / 0 failures / 0 errors / 0 skipped**，其中 `TestCaseDraftIT` **17 / 0 / 0 / 0**。
 - PostgreSQL/Flyway：实际测试数据库为 **PostgreSQL 16.6**；日志为 `Successfully applied 7 migrations ... now at version v007`。Migration 清单仅 V001–V007，**V008 未创建**，migration 文件无修改。
 - Frontend：`npm run typecheck`、`npm run lint`、`npm run test`、`npm run build` 均通过；Vitest **9 files / 39 tests**，build 转换 3203 modules，仅有既存的 chunk >500 kB warning；`frontend/src` 无变更。
+
+---
+
+### Phase 7 — Test Case Lifecycle ✅ Completed（2026-09-03）
+
+| 项目 | 状态 | 说明 |
+|------|------|------|
+| V008 Migration | ✅ | `V008__test_case_lifecycle.sql`：`test_case_review_records`（action 5 值 CHECK：SUBMIT/PUBLISH/RETURN/REJECT/DEPRECATE）、`revision_contributors`（`revision_contributors_version_id_user_id_key` UNIQUE(version_id, user_id)）；V001–V007 未修改 |
+| Backend Entities | ✅ | `TestCaseReviewRecordEntity`、`RevisionContributorEntity`、`ReviewRecordAction` 枚举（5 值）；版本字段 `based_on_version_id` / `version_major` / `version_minor` / `revision_closed` 由 Phase 6 已建 |
+| Backend Service | ✅ | `TestCaseLifecycleService`：submitReview / publish / returnReview / reject / deprecate / createRevision / reviewRecords / contributors；事务内 `PESSIMISTIC_WRITE` 锁定 Master 行保障并发 Publish/CreateRevision/Deprecate；Published Immutable 入口硬断言 |
+| Access Policy | ✅ | `TestCaseAccessPolicy`：ADMIN 全权 + owner/contributor 资源级判定；与 Controller `@PreAuthorize` 权限码构成双闸门 |
+| Controller | ✅ | `TestCaseLifecycleController`：10 端点（submit-review / publish / return / reject / deprecate / revisions / review-records GET / contributors GET / contributors POST / contributors DELETE），权限码全部匹配 Phase 7 契约 |
+| DTO | ✅ | `AllowedActions`(9 字段)、`TestCaseVersionResponse`(+latestReviewAction)、`VersionSummaryResponse`(+revisionClosed)、`ReviewRecordResponse`、`ContributorResponse`、`LifecycleActionRequest`、`CreateRevisionRequest`、`AddContributorRequest` |
+| 硬规则 | ✅ | ① Published Immutable（Service 层，ADMIN 不例外）② 单一当前发布版本（部分唯一索引 `uq_test_case_current_version`）③ 版本号服务端控制（major=源 major，minor=同 major MAX+1）④ Reject **无 REJECTED 状态**（保持 REVIEW + `revision_closed=true`）⑤ 资源级 RBAC + 权限码双闸门 ⑥ AllowedActions 服务端计算驱动前端 |
+| Frontend 类型/API | ✅ | `shared/types/testCase.ts` 扩展 `ReviewRecordAction` / `ReviewRecord` / `Contributor` / `AllowedActions`(9) / `latestReviewAction`；`testCaseApi.ts` 新增 10 个生命周期端点函数 |
+| Frontend Hooks | ✅ | `useTestCases.ts` 新增 `useReviewRecords` / `useContributors` / `useSubmitReview` / `usePublish` / `useReturnReview` / `useReject` / `useDeprecate` / `useCreateRevision` / `useAddContributor` / `useRemoveContributor`（mutation 成功后失效 testCases/detail/versions/reviewRecords 缓存） |
+| Frontend 页面 | ✅ | `TestCaseDetailPage.tsx` 重写：按 `allowedActions` 渲染操作栏（编辑/提交评审/发布/退回/驳回/弃用/创建修订）；`latestReviewAction==='REJECT'` 显示红色「已驳回」标签；评审记录 Timeline（按 action 着色）；贡献者管理 card |
+| Frontend Schema | ✅ | `lifecycleCommentSchema`（comment 必填 ≤2000）、`createRevisionSchema`（changeReason ≤2000）、`addContributorSchema`（userId 必填） |
+| 后端测试 | ✅ | `TestCaseLifecycleControllerRbacTest` **15**、`TestCaseAccessPolicyTest` **11**、`TestCaseLifecycleServiceTest` **21**（共 47 单测/RBAC 切片）；`TestCaseLifecycleIT` **15**（PostgreSQL Testcontainers IT） |
+| 前端测试 | ✅ | `testCaseApi.test.ts`（+12 生命周期端点）、`TestCaseDetailLifecycle.test.tsx`（2：操作栏按 allowedActions 渲染 + 已驳回标签）、`phase6ReviewRound.test.tsx`（补全 mock） |
+
+> **Phase 7 文档依据说明：** 冻结契约为 `docs/phase7-api-contract.md`（Lead 冻结）与 `docs/phase7-implementation-plan.md`；状态机、错误码、Immutable、版本号、资源级 RBAC 全部以上述两文件及 `IoT-Security-Case-Hub_Final-Technical-Review_V1.0.md` 为准。严格未实现 Phase 8（DecisionPoint/DAG）及后续模块。
+
+> **Phase 7 最终验证（2026-09-03，实际执行结果）：**
+> - Backend：`mvn -q clean test` 通过，**Surefire 176 tests / 0 failures / 0 errors / 0 skipped**；`mvn -q verify` 通过，**Failsafe 58 PostgreSQL Testcontainers IT / 0 failures / 0 errors / 0 skipped**（含 `TestCaseLifecycleIT` 15）；日志确认 Flyway V001–V008 全部成功迁移（`now at version v008`）。
+> - Frontend：`npm run typecheck` 0 error；`npm run lint` 0 warning；`npm test` **10 files / 51 tests** 全绿；`npm run build` 成功（Vite 转换 3203 modules，仅 chunk >500 kB warning）。
+> - Phase 7 为当前冻结范围最后阶段；下一轮开发（Phase 8+）禁止启动。
 
 ---
 
@@ -412,10 +440,11 @@
 
 ## Next Wave
 
-Code Review 通过后，下一轮开发（**本轮未开始，遵守 Phase 边界**）：
+Phase 0–7 已全部完成并集成到 `dev/v1-implementation`。按冻结约束，**Phase 8（DecisionPoint/DAG）及后续模块禁止启动**——V1 实现范围止于 Phase 7 Test Case Lifecycle。
 
-- **Phase 6 — Master Test Case 基础**
-- **Phase 7 — Test Case Lifecycle**
+如需继续，下一轮候选（未开始，需新任务授权）：
+
+- **Phase 8+ — DecisionPoint / DAG / Project / Generation / Execution / Evidence / Storage**
 
 ---
 

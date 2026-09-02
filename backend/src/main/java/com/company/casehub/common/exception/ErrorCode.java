@@ -56,6 +56,15 @@ public enum ErrorCode {
     TEST_CASE_SORT_FIELD_INVALID(HttpStatus.BAD_REQUEST, "Test case sort field is invalid."),
     TEST_CASE_DRAFT_EDIT_FORBIDDEN(HttpStatus.FORBIDDEN, "You cannot edit this Draft."),
 
+    // ---- Test Case Lifecycle (Phase 7) ----
+    TEST_CASE_LIFECYCLE_TRANSITION_INVALID(HttpStatus.UNPROCESSABLE_ENTITY, "This lifecycle transition is not valid for the current status."),
+    TEST_CASE_REVISION_CLOSED(HttpStatus.CONFLICT, "This revision is closed and cannot be submitted, reviewed or edited."),
+    TEST_CASE_REVIEW_COMMENT_REQUIRED(HttpStatus.BAD_REQUEST, "A review comment is required for this action."),
+    TEST_CASE_DRAFT_INCOMPLETE(HttpStatus.UNPROCESSABLE_ENTITY, "The draft is missing required fields before review."),
+    TEST_CASE_LIFECYCLE_FORBIDDEN(HttpStatus.FORBIDDEN, "You do not have permission to perform this lifecycle action."),
+    TEST_CASE_REVISION_SOURCE_INVALID(HttpStatus.UNPROCESSABLE_ENTITY, "The revision source version is invalid."),
+    TEST_CASE_CONTRIBUTOR_INVALID(HttpStatus.BAD_REQUEST, "The contributor is invalid or already added."),
+
     // ---- Generic (reused by later phases) ----
     VALIDATION_FAILED(HttpStatus.BAD_REQUEST, "Request validation failed."),
     RESOURCE_NOT_FOUND(HttpStatus.NOT_FOUND, "The requested resource was not found."),

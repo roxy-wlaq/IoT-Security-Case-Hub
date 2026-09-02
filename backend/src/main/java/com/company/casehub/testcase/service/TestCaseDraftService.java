@@ -69,13 +69,15 @@ public class TestCaseDraftService {
     private final ToolRepository toolRepository;
     private final StandardTaskTypeRepository standardRepository;
     private final UserRepository userRepository;
+    private final TestCaseAccessPolicy accessPolicy;
 
     public TestCaseDraftService(MasterTestCaseRepository masterRepository, TestCaseVersionRepository versionRepository,
                                 TestStepRepository stepRepository, TestCaseTagRepository caseTagRepository,
                                 TestCaseToolRepository caseToolRepository, TestCaseStandardMappingRepository mappingRepository,
                                 TestCaseAttachmentRepository attachmentRepository, CategoryRepository categoryRepository,
                                 TagRepository tagRepository, ToolRepository toolRepository,
-                                StandardTaskTypeRepository standardRepository, UserRepository userRepository) {
+                                StandardTaskTypeRepository standardRepository, UserRepository userRepository,
+                                TestCaseAccessPolicy accessPolicy) {
         this.masterRepository = masterRepository;
         this.versionRepository = versionRepository;
         this.stepRepository = stepRepository;
@@ -88,6 +90,7 @@ public class TestCaseDraftService {
         this.toolRepository = toolRepository;
         this.standardRepository = standardRepository;
         this.userRepository = userRepository;
+        this.accessPolicy = accessPolicy;
     }
 
     @Transactional
@@ -126,12 +129,14 @@ public class TestCaseDraftService {
         TestCaseVersionEntity draft = versionRepository
                 .findFirstByMasterTestCaseIdAndStatusOrderByVersionMajorDescVersionMinorDesc(masterId, TestCaseVersionStatus.DRAFT)
                 .orElseThrow(() -> new ConflictException(ErrorCode.TEST_CASE_DRAFT_REQUIRED, "No Draft exists for: " + masterId));
-        if (draft.getStatus() != TestCaseVersionStatus.DRAFT) {
-            throw new ConflictException(ErrorCode.TEST_CASE_VERSION_IMMUTABLE, "Only Draft versions can be edited.");
+        // Published Immutable (Service-layer, not just DB CHECK): a closed or non-DRAFT
+        // version is rejected here even if a caller somehow targets it via the Draft API.
+        if (draft.isRevisionClosed() || draft.getStatus() != TestCaseVersionStatus.DRAFT) {
+            throw new ConflictException(ErrorCode.TEST_CASE_VERSION_IMMUTABLE, "Only open Draft versions can be edited.");
         }
-        if (!isAdmin(principal) && (master.getCreatedBy() == null || !Objects.equals(master.getCreatedBy().getId(), principal.getId()))) {
+        if (!accessPolicy.canEditOrSubmit(draft, principal)) {
             throw new ForbiddenOperationException(ErrorCode.TEST_CASE_DRAFT_EDIT_FORBIDDEN,
-                    "Only the Draft creator or an administrator may edit this test case.");
+                    "Only the Draft owner, a contributor or an administrator may edit this test case.");
         }
         draft.setCaseName(request.caseName().trim());
         draft.setTestPurpose(trimToNull(request.testPurpose()));
@@ -280,22 +285,12 @@ public class TestCaseDraftService {
                 null, draft == null ? null : TestCaseVersionResponse.from(draft), visible == null ? null : TestCaseVersionResponse.from(visible),
                 master.getVersions().stream().sorted((a, b) -> Integer.compare(b.getVersionMajor() * 10000 + b.getVersionMinor(), a.getVersionMajor() * 10000 + a.getVersionMinor()))
                         .map(VersionSummaryResponse::from).toList(),
-                new AllowedActions(canEditDraft(master, draft, principal), principal.getPermissions().contains("test_case:draft_create")));
-    }
-
-    private boolean canEditDraft(MasterTestCaseEntity master, TestCaseVersionEntity draft, UserPrincipal principal) {
-        return principal.getPermissions().contains("test_case:draft_edit") && draft != null
-                && draft.getStatus() == TestCaseVersionStatus.DRAFT
-                && (isAdmin(principal) || (master.getCreatedBy() != null && Objects.equals(master.getCreatedBy().getId(), principal.getId())));
+                accessPolicy.buildAllowedActions(master, draft, visible, principal));
     }
 
     private UserEntity currentUser(UserPrincipal principal) {
         return userRepository.findById(principal.getId()).orElseThrow(() ->
                 new ResourceNotFoundException(ErrorCode.TEST_CASE_NOT_FOUND, "Current user was not found."));
-    }
-
-    private static boolean isAdmin(UserPrincipal principal) {
-        return principal.getRoles().contains("ADMIN");
     }
 
     private static String trimToNull(String value) {

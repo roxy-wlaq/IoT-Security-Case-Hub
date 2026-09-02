@@ -1,32 +1,119 @@
 import { describe, expect, it, vi } from 'vitest';
 import { httpClient } from '@/shared/api/httpClient';
-import { createTestCase, listTestCases } from '@/features/testcase/api/testCaseApi';
+import {
+  addContributor,
+  createRevision,
+  createTestCase,
+  deprecateVersion,
+  getReviewRecords,
+  listContributors,
+  listTestCases,
+  publishVersion,
+  rejectVersion,
+  removeContributor,
+  returnReview,
+  submitReview,
+} from '@/features/testcase/api/testCaseApi';
 
 vi.mock('@/shared/api/httpClient', () => ({
   httpClient: {
     get: vi.fn(),
     post: vi.fn(),
     put: vi.fn(),
+    delete: vi.fn(),
   },
 }));
 
+// axios exposes a complex AxiosInstance type, so `vi.mocked` cannot surface the
+// mock methods; cast the mock shape explicitly for type-safe assertions.
+const mocked = httpClient as unknown as {
+  get: ReturnType<typeof vi.fn>;
+  post: ReturnType<typeof vi.fn>;
+  put: ReturnType<typeof vi.fn>;
+  delete: ReturnType<typeof vi.fn>;
+};
+
 describe('testCaseApi', () => {
   it('serializes the frozen library query parameters and endpoint', async () => {
-    vi.mocked(httpClient.get).mockResolvedValue({ data: { content: [], page: 0, size: 20, totalElements: 0, totalPages: 0, first: true, last: true } });
+    mocked.get.mockResolvedValue({ data: { content: [], page: 0, size: 20, totalElements: 0, totalPages: 0, first: true, last: true } });
 
     await listTestCases({ q: 'bluetooth', tagIds: ['tag-1', 'tag-2'], page: 0, size: 20, sort: 'updatedAt,desc' });
 
-    expect(httpClient.get).toHaveBeenCalledWith('/test-cases', {
+    expect(mocked.get).toHaveBeenCalledWith('/test-cases', {
       params: { q: 'bluetooth', tagIds: ['tag-1', 'tag-2'], page: 0, size: 20, sort: 'updatedAt,desc' },
     });
   });
 
   it('creates a Draft through the Phase 6 endpoint', async () => {
     const detail = { id: 'master-1' };
-    vi.mocked(httpClient.post).mockResolvedValue({ data: detail });
+    mocked.post.mockResolvedValue({ data: detail });
 
     await createTestCase({ caseCode: 'BLE-001' } as never);
 
-    expect(httpClient.post).toHaveBeenCalledWith('/test-cases', { caseCode: 'BLE-001' });
+    expect(mocked.post).toHaveBeenCalledWith('/test-cases', { caseCode: 'BLE-001' });
+  });
+
+  // -------------------------------------------------------------------------
+  // Phase 7 — lifecycle endpoints
+  // -------------------------------------------------------------------------
+
+  it('submits a Draft for review', async () => {
+    mocked.post.mockResolvedValue({ data: { id: 'master-1' } });
+    await submitReview('master-1', { comment: 'ready' });
+    expect(mocked.post).toHaveBeenCalledWith('/test-cases/master-1/draft/submit-review', { comment: 'ready' });
+  });
+
+  it('publishes a REVIEW version', async () => {
+    mocked.post.mockResolvedValue({ data: { id: 'master-1' } });
+    await publishVersion('master-1', 'v-2', { comment: 'approved' });
+    expect(mocked.post).toHaveBeenCalledWith('/test-cases/master-1/versions/v-2/publish', { comment: 'approved' });
+  });
+
+  it('returns a REVIEW version to Draft', async () => {
+    mocked.post.mockResolvedValue({ data: { id: 'master-1' } });
+    await returnReview('master-1', 'v-2', { comment: 'fix steps' });
+    expect(mocked.post).toHaveBeenCalledWith('/test-cases/master-1/versions/v-2/return', { comment: 'fix steps' });
+  });
+
+  it('rejects a REVIEW version (keeps REVIEW status)', async () => {
+    mocked.post.mockResolvedValue({ data: { id: 'master-1' } });
+    await rejectVersion('master-1', 'v-2', { comment: 'non-compliant' });
+    expect(mocked.post).toHaveBeenCalledWith('/test-cases/master-1/versions/v-2/reject', { comment: 'non-compliant' });
+  });
+
+  it('deprecates a PUBLISHED version', async () => {
+    mocked.post.mockResolvedValue({ data: { id: 'master-1' } });
+    await deprecateVersion('master-1', 'v-2', {});
+    expect(mocked.post).toHaveBeenCalledWith('/test-cases/master-1/versions/v-2/deprecate', {});
+  });
+
+  it('creates a revision from the current PUBLISHED version', async () => {
+    mocked.post.mockResolvedValue({ data: { id: 'master-1' } });
+    await createRevision('master-1', { changeReason: 'minor update' });
+    expect(mocked.post).toHaveBeenCalledWith('/test-cases/master-1/revisions', { changeReason: 'minor update' });
+  });
+
+  it('fetches the review records of a version', async () => {
+    mocked.get.mockResolvedValue({ data: [] });
+    await getReviewRecords('master-1', 'v-2');
+    expect(mocked.get).toHaveBeenCalledWith('/test-cases/master-1/versions/v-2/review-records');
+  });
+
+  it('lists contributors of the current Draft', async () => {
+    mocked.get.mockResolvedValue({ data: [] });
+    await listContributors('master-1');
+    expect(mocked.get).toHaveBeenCalledWith('/test-cases/master-1/draft/contributors');
+  });
+
+  it('adds a contributor', async () => {
+    mocked.post.mockResolvedValue({ data: [] });
+    await addContributor('master-1', 'user-9');
+    expect(mocked.post).toHaveBeenCalledWith('/test-cases/master-1/draft/contributors', { userId: 'user-9' });
+  });
+
+  it('removes a contributor', async () => {
+    mocked.delete.mockResolvedValue({ data: [] });
+    await removeContributor('master-1', 'user-9');
+    expect(mocked.delete).toHaveBeenCalledWith('/test-cases/master-1/draft/contributors/user-9');
   });
 });

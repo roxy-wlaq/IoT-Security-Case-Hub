@@ -58,6 +58,7 @@ class TestCaseDraftServiceTest {
     @Mock private ToolRepository toolRepository;
     @Mock private StandardTaskTypeRepository standardRepository;
     @Mock private UserRepository userRepository;
+    @Mock private TestCaseAccessPolicy accessPolicy;
 
     @InjectMocks private TestCaseDraftService service;
 
@@ -116,6 +117,7 @@ class TestCaseDraftServiceTest {
         when(masterRepository.findById(masterId)).thenReturn(Optional.of(master));
         when(versionRepository.findFirstByMasterTestCaseIdAndStatusOrderByVersionMajorDescVersionMinorDesc(masterId, TestCaseVersionStatus.DRAFT))
                 .thenReturn(Optional.of(draft));
+        when(accessPolicy.canEditOrSubmit(draft, principal(userId, "TEST_COORDINATOR"))).thenReturn(true);
 
         var updated = service.updateDraft(masterId, new UpdateDraftRequest("Updated", null, null, SelectionMode.MULTIPLE,
                 false, null, null, null, List.of(new StepRequest(null, "content")), null, null, null), principal(userId, "TEST_COORDINATOR"));

@@ -29,3 +29,25 @@ export const TEST_CASE_DRAFT_DEFAULTS: TestCaseDraftFormValues = {
   evidenceRequired: false, evidenceRequirement: '', remarkRequirement: '', progressiveRole: null,
   steps: [], tagIds: [], toolIds: [], standardMappings: [],
 };
+
+// ---------------------------------------------------------------------------
+// Phase 7 — Test Case Lifecycle schemas
+// ---------------------------------------------------------------------------
+
+/** Comment required by the backend for Return and Reject (VALIDATION_FAILED if blank). */
+export const lifecycleCommentSchema = z.object({
+  comment: z.string().trim().min(1, '请填写评审意见').max(2000, '评审意见最多 2000 个字符'),
+});
+export type LifecycleCommentValues = z.infer<typeof lifecycleCommentSchema>;
+
+/** Optional change reason recorded on the new revision draft. */
+export const createRevisionSchema = z.object({
+  changeReason: z.string().trim().max(2000, '变更说明最多 2000 个字符').optional().or(z.literal('')),
+});
+export type CreateRevisionFormValues = z.infer<typeof createRevisionSchema>;
+
+/** Add-contributor payload: userId is mandatory. */
+export const addContributorSchema = z.object({
+  userId: z.string().min(1, '请选择贡献者'),
+});
+export type AddContributorFormValues = z.infer<typeof addContributorSchema>;

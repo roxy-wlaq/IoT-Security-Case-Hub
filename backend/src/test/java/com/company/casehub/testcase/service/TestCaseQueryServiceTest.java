@@ -10,6 +10,7 @@ import static org.mockito.Mockito.when;
 
 import com.company.casehub.auth.security.UserPrincipal;
 import com.company.casehub.category.entity.CategoryEntity;
+import com.company.casehub.testcase.dto.AllowedActions;
 import com.company.casehub.testcase.dto.TestCaseDetailResponse;
 import com.company.casehub.testcase.entity.MasterTestCaseEntity;
 import com.company.casehub.testcase.entity.SelectionMode;
@@ -17,6 +18,7 @@ import com.company.casehub.testcase.entity.TestCaseVersionEntity;
 import com.company.casehub.testcase.entity.TestCaseVersionStatus;
 import com.company.casehub.testcase.repository.MasterTestCaseRepository;
 import com.company.casehub.testcase.repository.TestCaseLibraryQueryRepository;
+import com.company.casehub.testcase.repository.TestCaseReviewRecordRepository;
 import com.company.casehub.testcase.repository.TestCaseVersionRepository;
 import com.company.casehub.user.entity.UserEntity;
 import java.util.List;
@@ -37,6 +39,8 @@ class TestCaseQueryServiceTest {
     @Mock private MasterTestCaseRepository masterRepository;
     @Mock private TestCaseLibraryQueryRepository libraryRepository;
     @Mock private TestCaseVersionRepository versionRepository;
+    @Mock private TestCaseAccessPolicy accessPolicy;
+    @Mock private TestCaseReviewRecordRepository reviewRecordRepository;
     @InjectMocks private TestCaseQueryService service;
 
     @Test
@@ -121,6 +125,9 @@ class TestCaseQueryServiceTest {
         TestCaseVersionEntity draft = version(user, master, TestCaseVersionStatus.DRAFT, "Draft name");
         master.setVersions(List.of(draft));
         when(masterRepository.findById(master.getId())).thenReturn(Optional.of(master));
+        when(reviewRecordRepository.findFirstByTestCaseVersionIdOrderByCreatedAtDescIdDesc(any())).thenReturn(Optional.empty());
+        when(accessPolicy.buildAllowedActions(any(), any(), any(), any()))
+                .thenReturn(new AllowedActions(true, true, true, false, false, false, false, false, false));
 
         TestCaseDetailResponse response = service.detail(master.getId(), principal(userId, "TEST_COORDINATOR"));
 
@@ -146,6 +153,7 @@ class TestCaseQueryServiceTest {
         published.setCurrentVersion(true);
         master.setVersions(List.of(draft, published));
         when(masterRepository.findById(master.getId())).thenReturn(Optional.of(master));
+        when(reviewRecordRepository.findFirstByTestCaseVersionIdOrderByCreatedAtDescIdDesc(any())).thenReturn(Optional.empty());
 
         TestCaseDetailResponse response = service.detail(master.getId(), principal(userId, "TEST_COORDINATOR"));
 
