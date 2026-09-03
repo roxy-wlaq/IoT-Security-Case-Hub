@@ -10,6 +10,7 @@ import com.company.casehub.common.exception.BusinessRuleException;
 import com.company.casehub.common.exception.ConflictException;
 import com.company.casehub.common.exception.ErrorCode;
 import com.company.casehub.common.exception.ForbiddenOperationException;
+import com.company.casehub.common.exception.ResourceNotFoundException;
 import com.company.casehub.testcase.dto.CreateDraftRequest;
 import com.company.casehub.testcase.dto.CreateRevisionRequest;
 import com.company.casehub.testcase.dto.LifecycleActionRequest;
@@ -803,6 +804,52 @@ class TestCaseLifecycleIT extends AbstractIntegrationTest {
         assertThatThrownBy(() -> lifecycleService.addContributor(masterId,
                 new com.company.casehub.testcase.dto.AddContributorRequest(other.getId()), testerPrincipal))
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.TEST_CASE_LIFECYCLE_FORBIDDEN);
+    }
+
+    // -------------------------------------------------------------------------
+    // HIGH-05 — Unrelated Coordinator cannot branch a revision by omitting the
+    // source, and is denied an explicit rejected source
+    // -------------------------------------------------------------------------
+
+    @Test
+    void unrelatedCoordinatorCannotCreateRevisionWithOmittedSource() {
+        TestCaseDetailResponse created = createDraft("H5-001", "Omitted Source");
+        UUID masterId = created.id();
+        UUID versionId = created.visibleVersion().id();
+        lifecycleService.submitReview(masterId, new LifecycleActionRequest("submit"), coordinatorPrincipal);
+        lifecycleService.publish(masterId, versionId, new LifecycleActionRequest("publish"), adminPrincipal);
+
+        UserPrincipal unrelated = unrelatedCoordinator();
+        // No explicit sourceVersionId — the default fallback must be denied for an
+        // unrelated Coordinator (HIGH-05: omitted sourceVersionId -> DENY).
+        assertThatThrownBy(() -> lifecycleService.createRevision(
+                masterId, new CreateRevisionRequest(null, "unrelated branch"), unrelated))
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.TEST_CASE_REVISION_SOURCE_INVALID);
+    }
+
+    @Test
+    void unrelatedCoordinatorCannotCreateRevisionFromRejectedSource() {
+        TestCaseDetailResponse created = createDraft("H5-002", "Rejected Source");
+        UUID masterId = created.id();
+        UUID versionId = created.visibleVersion().id();
+        lifecycleService.submitReview(masterId, new LifecycleActionRequest("submit"), coordinatorPrincipal);
+        lifecycleService.reject(masterId, versionId, new LifecycleActionRequest("non-compliant"), adminPrincipal);
+
+        UserPrincipal unrelated = unrelatedCoordinator();
+        // Explicit rejected (REVIEW + revision_closed) source must be denied for an
+        // unrelated Coordinator (HIGH-05: explicit rejected source -> DENY). The version
+        // is not visible to them, so requireVisibleVersion throws NOT_FOUND.
+        assertThatThrownBy(() -> lifecycleService.createRevision(
+                masterId, new CreateRevisionRequest(versionId, "unrelated branch"), unrelated))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    private UserPrincipal unrelatedCoordinator() {
+        String suffix = UUID.randomUUID().toString().substring(0, 8);
+        UserEntity other = userRepository.save(new UserEntity("it_unrelated_" + suffix, "Unrelated Coordinator", "hash"));
+        return new UserPrincipal(other.getId(), other.getUsername(), "hash", other.getDisplayName(), true, false,
+                Set.of("TEST_COORDINATOR"),
+                Set.of("test_case:read", "test_case:draft_create", "test_case:draft_edit", "test_case:submit_review"));
     }
 
     // -------------------------------------------------------------------------

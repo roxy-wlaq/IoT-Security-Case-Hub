@@ -73,10 +73,11 @@ class TestCaseLifecycleServiceTest {
     @InjectMocks private TestCaseLifecycleService service;
 
     // The resource-level visibility decision is unit-tested in TestCaseAccessPolicyTest; here the
-    // caller is assumed authorized to see the version so the lifecycle-transition assertions run.
+    // caller is assumed authorized to see/edit the version so the lifecycle-transition assertions run.
     @BeforeEach
-    void stubVersionVisible() {
+    void stubAuthorized() {
         lenient().when(accessPolicy.isVersionVisible(any(), any(), any())).thenReturn(true);
+        lenient().when(accessPolicy.canEditOrSubmit(any(), any())).thenReturn(true);
     }
 
     // -------------------------------------------------------------------------

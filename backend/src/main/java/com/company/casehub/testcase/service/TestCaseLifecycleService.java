@@ -393,16 +393,25 @@ public class TestCaseLifecycleService {
             throw new BusinessRuleException(ErrorCode.TEST_CASE_REVISION_SOURCE_INVALID,
                     "A revision can only be created from a PUBLISHED version or a rejected (closed) REVIEW version.");
         }
-        // Default source: the current PUBLISHED version, otherwise the latest rejected (closed) REVIEW version.
-        return master.getVersions().stream()
+        // Default source: the current PUBLISHED version, otherwise the latest rejected (closed)
+        // REVIEW version. HIGH-05: an unrelated principal (not owner/contributor/admin) must not be
+        // able to branch a revision simply by omitting the source — the fallback only applies when
+        // the principal has a direct edit/submit relationship with the chosen source. An unrelated
+        // Coordinator with draft_create is therefore denied (omitted sourceVersionId -> DENY), and
+        // can never reach a rejected REVIEW version it is not allowed to see.
+        TestCaseVersionEntity defaultSource = master.getVersions().stream()
                 .filter(v -> v.isCurrentVersion() && v.getStatus() == TestCaseVersionStatus.PUBLISHED)
                 .findFirst()
                 .orElseGet(() -> master.getVersions().stream()
                         .filter(v -> v.getStatus() == TestCaseVersionStatus.REVIEW && v.isRevisionClosed())
                         .max(Comparator.comparingInt(TestCaseVersionEntity::getVersionMajor)
                                 .thenComparingInt(TestCaseVersionEntity::getVersionMinor))
-                        .orElseThrow(() -> new BusinessRuleException(ErrorCode.TEST_CASE_REVISION_SOURCE_INVALID,
-                                "No PUBLISHED or rejected version to revise.")));
+                        .orElse(null));
+        if (defaultSource == null || !accessPolicy.canEditOrSubmit(defaultSource, principal)) {
+            throw new BusinessRuleException(ErrorCode.TEST_CASE_REVISION_SOURCE_INVALID,
+                    "No visible PUBLISHED or rejected version to revise, or the principal is not authorised to revise it.");
+        }
+        return defaultSource;
     }
 
     private void record(TestCaseVersionEntity version, ReviewRecordAction action, UserPrincipal principal, String comment) {
