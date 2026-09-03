@@ -8,6 +8,7 @@ import com.company.casehub.capability.entity.CapabilityEntity;
 import com.company.casehub.capability.repository.CapabilityRepository;
 import com.company.casehub.category.entity.CategoryEntity;
 import com.company.casehub.category.repository.CategoryRepository;
+import com.company.casehub.common.exception.ErrorCode;
 import com.company.casehub.common.exception.ForbiddenOperationException;
 import com.company.casehub.execution.dto.AssigneeRequest;
 import com.company.casehub.execution.entity.ProjectTestCaseSourceType;
@@ -140,7 +141,7 @@ class ProjectGenerationVerticalIT extends AbstractIntegrationTest {
                 "project_test_case:assign", "generation:run", "generation:review_recommendation",
                 "test_case:read", "test_case:draft_create", "test_case:draft_edit", "test_case:submit_review",
                 "test_case:review", "test_case:publish", "test_case:deprecate");
-        testerP = principal(testerUser, "TESTER", "project:read", "project_test_case:read");
+        testerP = principal(testerUser, "TESTER", "project:read", "project_test_case:read", "project_test_case:add");
     }
 
     private UserPrincipal principal(UserEntity user, String role, String... authorities) {
@@ -226,7 +227,12 @@ class ProjectGenerationVerticalIT extends AbstractIntegrationTest {
         assertThat(allCases).hasSize(1);
         assertThat(allCases.get(0).assignedToMe()).isTrue();
         assertThatThrownBy(() -> testPlanService.remove(ptcId, testerP))
-                .isInstanceOf(ForbiddenOperationException.class);
+                .isInstanceOf(ForbiddenOperationException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.PROJECT_ACCESS_FORBIDDEN);
+        assertThatThrownBy(() -> testPlanService.addMasterCase(
+                projectA, m2, ProjectTestCaseSourceType.MANUAL, testerP))
+                .isInstanceOf(ForbiddenOperationException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.PROJECT_ACCESS_FORBIDDEN);
 
         // ---- Scenario B: Ignore isolation across projects (independent project B/C).
         UUID m3 = masterPublished("PG-M3-" + UUID.randomUUID().toString().substring(0, 6));

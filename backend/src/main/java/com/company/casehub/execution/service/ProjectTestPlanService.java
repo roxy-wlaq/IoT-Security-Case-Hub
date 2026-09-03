@@ -73,7 +73,7 @@ public class ProjectTestPlanService {
     @Transactional
     public ProjectTestCaseResponse addMasterCase(UUID projectId, UUID masterId,
                                                   ProjectTestCaseSourceType source, UserPrincipal principal) {
-        accessPolicy.requireView(projectId, principal);
+        accessPolicy.requireManage(projectId, principal);
         ProjectEntity project = requireProject(projectId);
         MasterTestCaseEntity master = masterRepository.findById(masterId)
                 .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.TEST_CASE_NOT_FOUND, "Master Test Case not found"));
