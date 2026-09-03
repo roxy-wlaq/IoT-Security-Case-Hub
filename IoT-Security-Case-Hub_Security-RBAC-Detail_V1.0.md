@@ -1256,7 +1256,7 @@ Admin
 Contributor Tester：
 
 ```text
-默认不能 Submit Review
+可经资源级闸门提交（HIGH-02）——canEditDraftById 为真即放行；无关 Tester（非 owner / 非 contributor / 非 admin）不能 Submit Review
 ```
 
 ---

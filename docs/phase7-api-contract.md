@@ -230,7 +230,7 @@ interface ContributorResponse {
 | `TEST_CASE_REVIEW_COMMENT_REQUIRED` | 400 | Return / Reject 未提供 comment |
 | `TEST_CASE_DRAFT_INCOMPLETE` | 422 | Submit Review 时必要字段缺失（无 caseName 或无 Step） |
 | `TEST_CASE_LIFECYCLE_FORBIDDEN` | 403 | 资源级权限不通过（非 owner / 非 contributor / 非 ADMIN） |
-| `TEST_CASE_REVISION_SOURCE_INVALID` | 422 | Create Revision 的 source 版本不存在或不是 PUBLISHED |
+| `TEST_CASE_REVISION_SOURCE_INVALID` | 422 | Create Revision 的 source 版本不存在/不是 PUBLISHED，或省略 sourceVersionId 时调用方对该默认源无资源级编辑权限（HIGH-05） |
 | `TEST_CASE_CONTRIBUTOR_INVALID` | 400 | 贡献者用户不存在 / 未启用 / 重复添加 |
 | `TEST_CASE_VERSION_IMMUTABLE` | 409 | Published Immutable（Phase 6 已有，Phase 7 复用） |
 
