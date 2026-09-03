@@ -21,6 +21,7 @@ import com.company.casehub.testcase.entity.TransitionTargetEntity;
 import com.company.casehub.testcase.repository.DecisionPointRepository;
 import com.company.casehub.testcase.repository.MasterTestCaseRepository;
 import com.company.casehub.testcase.repository.TestCaseVersionRepository;
+import com.company.casehub.testcase.repository.TransitionTargetRepository;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -41,15 +42,18 @@ public class DecisionPointService {
     private final MasterTestCaseRepository masterRepository;
     private final TestCaseVersionRepository versionRepository;
     private final DecisionPointRepository decisionPointRepository;
+    private final TransitionTargetRepository transitionTargetRepository;
     private final TestCaseAccessPolicy accessPolicy;
     private final DagValidationService dagValidationService;
 
     public DecisionPointService(MasterTestCaseRepository masterRepository, TestCaseVersionRepository versionRepository,
-                                DecisionPointRepository decisionPointRepository, TestCaseAccessPolicy accessPolicy,
-                                DagValidationService dagValidationService) {
+                                DecisionPointRepository decisionPointRepository,
+                                TransitionTargetRepository transitionTargetRepository,
+                                TestCaseAccessPolicy accessPolicy, DagValidationService dagValidationService) {
         this.masterRepository = masterRepository;
         this.versionRepository = versionRepository;
         this.decisionPointRepository = decisionPointRepository;
+        this.transitionTargetRepository = transitionTargetRepository;
         this.accessPolicy = accessPolicy;
         this.dagValidationService = dagValidationService;
     }
@@ -155,7 +159,16 @@ public class DecisionPointService {
         List<UUID> ids = distinctTargetIds(request.targetMasterTestCaseIds());
         dagValidationService.validateTransitionTargets(request.transitionType(), ids);
         transition.setType(request.transitionType());
-        transition.getTargets().clear();
+        // Remove the previous targets at the DB level BEFORE inserting replacements.
+        // A clear()+addAll() on an orphan-removal collection flushes the new INSERTs
+        // (reusing target_order = 1..n) ahead of the orphan DELETEs, which violates
+        // uq_transition_targets_order(transition_id, target_order). Bulk-delete first.
+        if (!transition.getTargets().isEmpty()) {
+            List<TransitionTargetEntity> existing = new ArrayList<>(transition.getTargets());
+            transition.getTargets().clear();
+            transitionTargetRepository.deleteAllInBatch(existing);
+            transitionTargetRepository.flush();
+        }
         transition.getTargets().addAll(buildTargets(transition, ids));
     }
 

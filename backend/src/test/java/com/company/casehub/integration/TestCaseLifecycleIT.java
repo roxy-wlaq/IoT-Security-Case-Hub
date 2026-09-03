@@ -158,6 +158,48 @@ class TestCaseLifecycleIT extends AbstractIntegrationTest {
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.TEST_CASE_VERSION_IMMUTABLE);
     }
 
+    @Test
+    void updateRedirectsAndRescalesTransitionTargetsWithoutUniqueViolation() {
+        // HIGH-A regression: updating a decision point whose new and old transitions
+        // both carry >=1 target must not collide on uq_transition_targets_order.
+        TestCaseDetailResponse a = createDraft("P8-UPD-A-" + UUID.randomUUID().toString().substring(0, 8), "Upd A");
+        TestCaseDetailResponse b = createDraft("P8-UPD-B-" + UUID.randomUUID().toString().substring(0, 8), "Upd B");
+        TestCaseDetailResponse c = createDraft("P8-UPD-C-" + UUID.randomUUID().toString().substring(0, 8), "Upd C");
+        UUID av = a.visibleVersion().id();
+        UUID pointId = decisionPointService.create(a.id(), av,
+                new DecisionPointRequest("branch", null, 1, TransitionType.NEXT_CASE, List.of(b.id())), coordinatorPrincipal).id();
+
+        // Redirect NEXT_CASE target B -> C (both new and old have exactly 1 target).
+        var redirected = decisionPointService.update(a.id(), av, pointId,
+                new DecisionPointRequest("branch", null, 1, TransitionType.NEXT_CASE, List.of(c.id())), coordinatorPrincipal);
+        assertThat(redirected.transition().targets()).singleElement()
+                .satisfies(link -> assertThat(link.masterTestCaseId()).isEqualTo(c.id()));
+
+        // Scale NEXT_CASE(1) -> NEXT_CASES(2): B and C as two targets.
+        var scaledUp = decisionPointService.update(a.id(), av, pointId,
+                new DecisionPointRequest("branch", null, 1, TransitionType.NEXT_CASES, List.of(b.id(), c.id())), coordinatorPrincipal);
+        assertThat(scaledUp.transition().targets()).extracting("masterTestCaseId").containsExactlyInAnyOrder(b.id(), c.id());
+
+        // Scale back NEXT_CASES(2) -> NEXT_CASE(1): only B.
+        var scaledDown = decisionPointService.update(a.id(), av, pointId,
+                new DecisionPointRequest("branch", null, 1, TransitionType.NEXT_CASE, List.of(b.id())), coordinatorPrincipal);
+        assertThat(scaledDown.transition().targets()).singleElement()
+                .satisfies(link -> assertThat(link.masterTestCaseId()).isEqualTo(b.id()));
+
+        // Reduce to a terminal transition (0 targets) then back up again.
+        decisionPointService.update(a.id(), av, pointId,
+                new DecisionPointRequest("branch", null, 1, TransitionType.FAIL, List.of()), coordinatorPrincipal);
+        var backUp = decisionPointService.update(a.id(), av, pointId,
+                new DecisionPointRequest("branch", null, 1, TransitionType.NEXT_CASE, List.of(c.id())), coordinatorPrincipal);
+        assertThat(backUp.transition().targets()).singleElement()
+                .satisfies(link -> assertThat(link.masterTestCaseId()).isEqualTo(c.id()));
+
+        // The logic graph must reflect ONLY the latest target after each update.
+        var graph = decisionPointService.graph(a.id(), av, coordinatorPrincipal);
+        assertThat(graph.edges()).extracting("targetMasterTestCaseId").containsExactly(c.id());
+        assertThat(graph.edges()).extracting("targetMasterTestCaseId").doesNotContain(b.id());
+    }
+
     // -------------------------------------------------------------------------
     // Full lifecycle: Draft → Review → Published → Deprecated
     // -------------------------------------------------------------------------
