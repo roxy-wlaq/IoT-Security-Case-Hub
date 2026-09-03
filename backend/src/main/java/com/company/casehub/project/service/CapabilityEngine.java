@@ -7,6 +7,7 @@ import com.company.casehub.project.entity.ProjectCapabilitySource;
 import com.company.casehub.project.entity.ProjectCapabilityValue;
 import com.company.casehub.project.repository.ProjectCapabilityRepository;
 import com.company.casehub.project.repository.ProjectRepository;
+import com.company.casehub.user.entity.UserEntity;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -50,7 +51,7 @@ public class CapabilityEngine {
     }
 
     @Transactional
-    public void recalculateDerivedParents(UUID projectId, UUID ignoredCapabilityId) {
+    public void recalculateDerivedParents(UUID projectId, UUID ignoredCapabilityId, UserEntity actor) {
         List<CapabilityEntity> capabilities = capabilityRepository.findAllByOrderBySortOrderAscNameAsc();
         Map<UUID, ProjectCapabilityEntity> current = new HashMap<>();
         projectCapabilityRepository.findByProjectId(projectId)
@@ -80,6 +81,7 @@ public class CapabilityEngine {
                 row.setValue(ProjectCapabilityValue.YES);
                 row.setSource(ProjectCapabilitySource.DERIVED);
                 row.setDerived(true);
+                row.setUpdatedBy(actor);
                 current.put(parentId, row);
             } else if (row.isDerived()) {
                 row.setValue(ProjectCapabilityValue.YES);

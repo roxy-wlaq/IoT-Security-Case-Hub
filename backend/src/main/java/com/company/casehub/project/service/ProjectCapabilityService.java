@@ -82,7 +82,7 @@ public class ProjectCapabilityService {
         row.setComment(request.comment());
         row.setUpdatedBy(user);
         ProjectCapabilityResponse response = toResponse(repository.save(row));
-        engine.recalculateDerivedParents(projectId, capabilityId);
+        engine.recalculateDerivedParents(projectId, capabilityId, user);
         return response;
     }
 
