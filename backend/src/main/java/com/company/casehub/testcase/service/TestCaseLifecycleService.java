@@ -14,6 +14,9 @@ import com.company.casehub.testcase.dto.LifecycleActionRequest;
 import com.company.casehub.testcase.dto.ReviewRecordResponse;
 import com.company.casehub.testcase.dto.TestCaseDetailResponse;
 import com.company.casehub.testcase.entity.MasterTestCaseEntity;
+import com.company.casehub.testcase.entity.DecisionPointEntity;
+import com.company.casehub.testcase.entity.TransitionEntity;
+import com.company.casehub.testcase.entity.TransitionTargetEntity;
 import com.company.casehub.testcase.entity.ReviewRecordAction;
 import com.company.casehub.testcase.entity.RevisionContributorEntity;
 import com.company.casehub.testcase.entity.TestCaseReviewRecordEntity;
@@ -75,13 +78,14 @@ public class TestCaseLifecycleService {
     private final UserRepository userRepository;
     private final TestCaseAccessPolicy accessPolicy;
     private final TestCaseQueryService queryService;
+    private final DagValidationService dagValidationService;
 
     public TestCaseLifecycleService(MasterTestCaseRepository masterRepository, TestCaseVersionRepository versionRepository,
                                     TestCaseReviewRecordRepository reviewRecordRepository,
                                     RevisionContributorRepository contributorRepository, TestStepRepository stepRepository,
                                     TestCaseToolRepository toolRepository, TestCaseStandardMappingRepository mappingRepository,
                                     UserRepository userRepository, TestCaseAccessPolicy accessPolicy,
-                                    TestCaseQueryService queryService) {
+                                    TestCaseQueryService queryService, DagValidationService dagValidationService) {
         this.masterRepository = masterRepository;
         this.versionRepository = versionRepository;
         this.reviewRecordRepository = reviewRecordRepository;
@@ -92,6 +96,7 @@ public class TestCaseLifecycleService {
         this.userRepository = userRepository;
         this.accessPolicy = accessPolicy;
         this.queryService = queryService;
+        this.dagValidationService = dagValidationService;
     }
 
     // -------------------------------------------------------------------------
@@ -111,6 +116,7 @@ public class TestCaseLifecycleService {
                     "Only an authorised Draft owner or administrator may submit this draft.");
         }
         requireCompleteDraft(draft);
+        dagValidationService.validateVersion(draft);
         draft.setStatus(TestCaseVersionStatus.REVIEW);
         versionRepository.save(draft);
         record(draft, ReviewRecordAction.SUBMIT, principal, request.comment());
@@ -127,6 +133,7 @@ public class TestCaseLifecycleService {
                     "Only an administrator may publish a version.");
         }
         ensureReviewTransition(target);
+        dagValidationService.validateVersion(target);
         target.setStatus(TestCaseVersionStatus.PUBLISHED);
         target.setCurrentVersion(true);
         target.setPublishedAt(Instant.now());
@@ -236,6 +243,7 @@ public class TestCaseLifecycleService {
         copySteps(source, revision);
         copyTools(source, revision);
         copyMappings(source, revision);
+        copyDecisionPoints(source, revision);
         master.getVersions().add(revision);
         versionRepository.save(revision);
         return queryService.detail(masterId, principal);
@@ -455,6 +463,34 @@ public class TestCaseLifecycleService {
             relation.setStandardTaskType(src.getStandardTaskType());
             relation.setMappingNote(src.getMappingNote());
             target.getStandardMappings().add(relation);
+        }
+    }
+
+    private void copyDecisionPoints(TestCaseVersionEntity source, TestCaseVersionEntity target) {
+        for (DecisionPointEntity sourcePoint : source.getDecisionPoints().stream()
+                .sorted(Comparator.comparingInt(DecisionPointEntity::getDisplayOrder)).toList()) {
+            DecisionPointEntity point = new DecisionPointEntity();
+            point.setTestCaseVersion(target);
+            point.setDisplayOrder(sourcePoint.getDisplayOrder());
+            point.setName(sourcePoint.getName());
+            point.setDescription(sourcePoint.getDescription());
+            TransitionEntity sourceTransition = sourcePoint.getTransition();
+            if (sourceTransition != null) {
+                TransitionEntity transition = new TransitionEntity();
+                transition.setDecisionPoint(point);
+                transition.setType(sourceTransition.getType());
+                int order = 1;
+                for (TransitionTargetEntity sourceTarget : sourceTransition.getTargets().stream()
+                        .sorted(Comparator.comparingInt(TransitionTargetEntity::getTargetOrder)).toList()) {
+                    TransitionTargetEntity targetLink = new TransitionTargetEntity();
+                    targetLink.setTransition(transition);
+                    targetLink.setTargetOrder(order++);
+                    targetLink.setTargetMasterTestCase(sourceTarget.getTargetMasterTestCase());
+                    transition.getTargets().add(targetLink);
+                }
+                point.setTransition(transition);
+            }
+            target.getDecisionPoints().add(point);
         }
     }
 

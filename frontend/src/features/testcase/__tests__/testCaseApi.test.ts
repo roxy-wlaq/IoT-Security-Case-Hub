@@ -2,10 +2,13 @@ import { describe, expect, it, vi } from 'vitest';
 import { httpClient } from '@/shared/api/httpClient';
 import {
   addContributor,
+  createDecisionPoint,
   createRevision,
   createTestCase,
   deprecateVersion,
   getReviewRecords,
+  getMasterLogicGraph,
+  listDecisionPoints,
   listContributors,
   listTestCases,
   publishVersion,
@@ -13,6 +16,8 @@ import {
   removeContributor,
   returnReview,
   submitReview,
+  updateDecisionPoint,
+  deleteDecisionPoint,
 } from '@/features/testcase/api/testCaseApi';
 
 vi.mock('@/shared/api/httpClient', () => ({
@@ -115,5 +120,30 @@ describe('testCaseApi', () => {
     mocked.delete.mockResolvedValue({ data: [] });
     await removeContributor('master-1', 'user-9');
     expect(mocked.delete).toHaveBeenCalledWith('/test-cases/master-1/draft/contributors/user-9');
+  });
+
+  it('reads and edits the version-owned Decision Point contract', async () => {
+    mocked.get.mockResolvedValue({ data: [] });
+    await listDecisionPoints('master-1', 'v-2');
+    expect(mocked.get).toHaveBeenCalledWith('/test-cases/master-1/versions/v-2/decision-points');
+
+    mocked.post.mockResolvedValue({ data: { id: 'dp-1' } });
+    const payload = { name: 'Reachable', description: 'branch', displayOrder: 1, transitionType: 'NEXT_CASE' as const, targetMasterTestCaseIds: ['master-2'] };
+    await createDecisionPoint('master-1', 'v-2', payload);
+    expect(mocked.post).toHaveBeenCalledWith('/test-cases/master-1/versions/v-2/decision-points', payload);
+
+    mocked.put.mockResolvedValue({ data: { id: 'dp-1' } });
+    await updateDecisionPoint('master-1', 'v-2', 'dp-1', payload);
+    expect(mocked.put).toHaveBeenCalledWith('/test-cases/master-1/versions/v-2/decision-points/dp-1', payload);
+
+    mocked.delete.mockResolvedValue({ data: undefined });
+    await deleteDecisionPoint('master-1', 'v-2', 'dp-1');
+    expect(mocked.delete).toHaveBeenCalledWith('/test-cases/master-1/versions/v-2/decision-points/dp-1');
+  });
+
+  it('reads the Master Logic Graph', async () => {
+    mocked.get.mockResolvedValue({ data: { nodes: [], edges: [] } });
+    await getMasterLogicGraph('master-1', 'v-2');
+    expect(mocked.get).toHaveBeenCalledWith('/test-cases/master-1/versions/v-2/logic-graph');
   });
 });

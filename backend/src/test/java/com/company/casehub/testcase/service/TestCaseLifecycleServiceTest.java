@@ -69,6 +69,7 @@ class TestCaseLifecycleServiceTest {
     @Mock private UserRepository userRepository;
     @Mock private TestCaseAccessPolicy accessPolicy;
     @Mock private TestCaseQueryService queryService;
+    @Mock private DagValidationService dagValidationService;
 
     @InjectMocks private TestCaseLifecycleService service;
 

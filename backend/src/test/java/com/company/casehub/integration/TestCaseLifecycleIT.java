@@ -13,6 +13,7 @@ import com.company.casehub.common.exception.ForbiddenOperationException;
 import com.company.casehub.common.exception.ResourceNotFoundException;
 import com.company.casehub.testcase.dto.CreateDraftRequest;
 import com.company.casehub.testcase.dto.CreateRevisionRequest;
+import com.company.casehub.testcase.dto.DecisionPointRequest;
 import com.company.casehub.testcase.dto.LifecycleActionRequest;
 import com.company.casehub.testcase.dto.StepRequest;
 import com.company.casehub.testcase.dto.TestCaseDetailResponse;
@@ -21,6 +22,7 @@ import com.company.casehub.testcase.dto.VersionSummaryResponse;
 import com.company.casehub.testcase.entity.MasterTestCaseEntity;
 import com.company.casehub.testcase.entity.ReviewRecordAction;
 import com.company.casehub.testcase.entity.SelectionMode;
+import com.company.casehub.testcase.entity.TransitionType;
 import com.company.casehub.testcase.entity.TestCaseVersionEntity;
 import com.company.casehub.testcase.entity.TestCaseVersionStatus;
 import com.company.casehub.testcase.entity.TestStepEntity;
@@ -29,6 +31,7 @@ import com.company.casehub.testcase.repository.TestCaseReviewRecordRepository;
 import com.company.casehub.testcase.repository.TestCaseVersionRepository;
 import com.company.casehub.testcase.repository.TestStepRepository;
 import com.company.casehub.testcase.service.TestCaseDraftService;
+import com.company.casehub.testcase.service.DecisionPointService;
 import com.company.casehub.testcase.service.TestCaseLifecycleService;
 import com.company.casehub.testcase.service.TestCaseQueryService;
 import com.company.casehub.user.entity.UserEntity;
@@ -54,6 +57,7 @@ class TestCaseLifecycleIT extends AbstractIntegrationTest {
     @Autowired private TestCaseDraftService draftService;
     @Autowired private TestCaseLifecycleService lifecycleService;
     @Autowired private TestCaseQueryService queryService;
+    @Autowired private DecisionPointService decisionPointService;
     @Autowired private UserRepository userRepository;
     @Autowired private CategoryRepository categoryRepository;
     @Autowired private MasterTestCaseRepository masterRepository;
@@ -84,6 +88,74 @@ class TestCaseLifecycleIT extends AbstractIntegrationTest {
                 adminUser.getDisplayName(), true, false, Set.of("ADMIN"),
                 Set.of("test_case:read", "test_case:draft_create", "test_case:draft_edit", "test_case:submit_review",
                         "test_case:review", "test_case:publish", "test_case:deprecate"));
+    }
+
+    // -------------------------------------------------------------------------
+    // Phase 8 — Decision Point / Master Logic Graph
+    // -------------------------------------------------------------------------
+
+    @Test
+    void decisionPointCrudAndMasterGraphUseMasterTargets() {
+        TestCaseDetailResponse root = createDraft("P8-CRUD-" + UUID.randomUUID().toString().substring(0, 8), "Graph Root");
+        TestCaseDetailResponse target = createDraft("P8-TARGET-" + UUID.randomUUID().toString().substring(0, 8), "Graph Target");
+        UUID versionId = root.visibleVersion().id();
+
+        var created = decisionPointService.create(root.id(), versionId,
+                new DecisionPointRequest("Device reachable", "Branch when the device responds", 1,
+                        TransitionType.NEXT_CASE, List.of(target.id())), coordinatorPrincipal);
+        assertThat(created.name()).isEqualTo("Device reachable");
+        assertThat(created.displayOrder()).isEqualTo(1);
+        assertThat(created.transition().type()).isEqualTo(TransitionType.NEXT_CASE);
+        assertThat(created.transition().targets()).singleElement().satisfies(link -> {
+            assertThat(link.masterTestCaseId()).isEqualTo(target.id());
+            assertThat(link.caseCode()).isEqualTo(target.caseCode());
+        });
+
+        var graph = decisionPointService.graph(root.id(), versionId, coordinatorPrincipal);
+        assertThat(graph.rootMasterTestCaseId()).isEqualTo(root.id());
+        assertThat(graph.nodes()).extracting("masterTestCaseId").contains(root.id(), target.id());
+        assertThat(graph.edges()).singleElement().satisfies(edge -> {
+            assertThat(edge.sourceMasterTestCaseId()).isEqualTo(root.id());
+            assertThat(edge.targetMasterTestCaseId()).isEqualTo(target.id());
+        });
+
+        var updated = decisionPointService.update(root.id(), versionId, created.id(),
+                new DecisionPointRequest("Device not reachable", null, 2, TransitionType.FAIL, List.of()), coordinatorPrincipal);
+        assertThat(updated.displayOrder()).isEqualTo(2);
+        assertThat(updated.transition().type()).isEqualTo(TransitionType.FAIL);
+        assertThat(updated.transition().targets()).isEmpty();
+        decisionPointService.delete(root.id(), versionId, created.id(), coordinatorPrincipal);
+        assertThat(decisionPointService.list(root.id(), versionId, coordinatorPrincipal)).isEmpty();
+    }
+
+    @Test
+    void dagRejectsTwoNodeAndThreeNodeCycles() {
+        TestCaseDetailResponse a = createDraft("P8-CYCLE-A-" + UUID.randomUUID().toString().substring(0, 8), "Cycle A");
+        TestCaseDetailResponse b = createDraft("P8-CYCLE-B-" + UUID.randomUUID().toString().substring(0, 8), "Cycle B");
+        UUID av = a.visibleVersion().id();
+        UUID bv = b.visibleVersion().id();
+        decisionPointService.create(a.id(), av, new DecisionPointRequest("to B", null, 1, TransitionType.NEXT_CASE, List.of(b.id())), coordinatorPrincipal);
+        assertThatThrownBy(() -> decisionPointService.create(b.id(), bv,
+                new DecisionPointRequest("to A", null, 1, TransitionType.NEXT_CASE, List.of(a.id())), coordinatorPrincipal))
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.TEST_CASE_DAG_CYCLE_DETECTED);
+
+        TestCaseDetailResponse c = createDraft("P8-CYCLE-C-" + UUID.randomUUID().toString().substring(0, 8), "Cycle C");
+        decisionPointService.create(b.id(), bv, new DecisionPointRequest("to C", null, 1, TransitionType.NEXT_CASE, List.of(c.id())), coordinatorPrincipal);
+        assertThatThrownBy(() -> decisionPointService.create(c.id(), c.visibleVersion().id(),
+                new DecisionPointRequest("to A", null, 1, TransitionType.NEXT_CASE, List.of(a.id())), coordinatorPrincipal))
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.TEST_CASE_DAG_CYCLE_DETECTED);
+    }
+
+    @Test
+    void publishedVersionLogicIsImmutable() {
+        TestCaseDetailResponse root = createDraft("P8-IMMUTABLE-" + UUID.randomUUID().toString().substring(0, 8), "Published Logic");
+        UUID versionId = root.visibleVersion().id();
+        lifecycleService.submitReview(root.id(), new LifecycleActionRequest("submit"), coordinatorPrincipal);
+        lifecycleService.publish(root.id(), versionId, new LifecycleActionRequest("publish"), adminPrincipal);
+
+        assertThatThrownBy(() -> decisionPointService.create(root.id(), versionId,
+                new DecisionPointRequest("forbidden", null, 1, TransitionType.PASS, List.of()), adminPrincipal))
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.TEST_CASE_VERSION_IMMUTABLE);
     }
 
     // -------------------------------------------------------------------------

@@ -116,4 +116,18 @@ class MigrationIT extends AbstractIntegrationTest {
         assertThat(userRepository.findByUsernameIgnoreCase("bobby")).isPresent();
         assertThat(userRepository.findByUsernameIgnoreCase("BOBBY").orElseThrow().getId()).isEqualTo(id);
     }
+
+    @Test
+    void phase8MigrationCreatesOnlyMasterDagTables() {
+        Integer phase8Tables = jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'casehub' "
+                        + "AND table_name IN ('decision_points','transitions','transition_targets')", Integer.class);
+        assertThat(phase8Tables).isEqualTo(3);
+        Integer runtimeTables = jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'casehub' "
+                        + "AND table_name IN ('project_decision_selections','branch_outcomes','project_test_cases')", Integer.class);
+        assertThat(runtimeTables).isZero();
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM casehub.flyway_schema_history WHERE version = '009'", Integer.class)).isEqualTo(1);
+    }
 }

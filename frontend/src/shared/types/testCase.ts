@@ -1,6 +1,7 @@
 export type TestCaseStatus = 'DRAFT' | 'REVIEW' | 'PUBLISHED' | 'DEPRECATED';
 export type SelectionMode = 'SINGLE' | 'MULTIPLE';
 export type ProgressiveRole = 'ENTRY' | 'NORMAL';
+export type TransitionType = 'NEXT_CASE' | 'NEXT_CASES' | 'PASS' | 'FAIL' | 'N_A';
 
 /**
  * Review-record action values (Phase 7). Mirrors the backend
@@ -56,7 +57,45 @@ export interface VersionSummary {
   changeReason?: string | null;
   createdBy: string;
   publishedAt?: string | null;
+  revisionClosed?: boolean;
   createdAt: string;
+}
+export interface TransitionTarget {
+  id: string;
+  targetOrder: number;
+  masterTestCaseId: string;
+  caseCode: string;
+}
+export interface Transition {
+  id: string;
+  type: TransitionType;
+  targets: TransitionTarget[];
+}
+export interface DecisionPoint {
+  id: string;
+  testCaseVersionId: string;
+  displayOrder: number;
+  name: string;
+  description?: string | null;
+  transition: Transition | null;
+}
+export interface LogicGraphNode {
+  masterTestCaseId: string;
+  caseCode: string;
+  label: string;
+}
+export interface LogicGraphEdge {
+  id: string;
+  sourceMasterTestCaseId: string;
+  targetMasterTestCaseId: string;
+  transitionType: TransitionType;
+  label: string;
+}
+export interface MasterLogicGraph {
+  testCaseVersionId: string;
+  rootMasterTestCaseId: string;
+  nodes: LogicGraphNode[];
+  edges: LogicGraphEdge[];
 }
 export interface TestCaseVersion {
   id: string;

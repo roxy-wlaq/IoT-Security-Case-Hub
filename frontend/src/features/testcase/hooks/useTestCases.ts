@@ -17,6 +17,11 @@ import {
   returnReview,
   submitReview,
   updateTestCaseDraft,
+  createDecisionPoint,
+  deleteDecisionPoint,
+  getMasterLogicGraph,
+  listDecisionPoints,
+  updateDecisionPoint,
 } from '@/features/testcase/api/testCaseApi';
 import type {
   CreateRevisionPayload,
@@ -33,6 +38,8 @@ import type {
   TestCaseSummary,
   TestCaseVersion,
   VersionSummary,
+  DecisionPoint,
+  MasterLogicGraph,
 } from '@/shared/types/testCase';
 
 export const testCasesQueryKey = ['testCases'] as const;
@@ -41,6 +48,8 @@ export const testCaseVersionsQueryKey = (masterId: string) => ['testCaseVersions
 export const testCaseVersionQueryKey = (masterId: string, versionId: string) => ['testCaseVersion', masterId, versionId] as const;
 export const reviewRecordsQueryKey = (masterId: string, versionId: string) => ['reviewRecords', masterId, versionId] as const;
 export const contributorsQueryKey = (masterId: string) => ['contributors', masterId] as const;
+export const decisionPointsQueryKey = (masterId: string, versionId: string) => ['decisionPoints', masterId, versionId] as const;
+export const logicGraphQueryKey = (masterId: string, versionId: string) => ['logicGraph', masterId, versionId] as const;
 
 /** Invalidate every cache slice that a lifecycle action can change. */
 function invalidateTestCaseCaches(client: ReturnType<typeof useQueryClient>, masterId: string) {
@@ -152,4 +161,33 @@ export function useRemoveContributor(): UseMutationResult<Contributor[], ApiErro
     mutationFn: ({ masterId, userId }) => removeContributor(masterId, userId),
     onSuccess: (_, vars) => void client.invalidateQueries({ queryKey: contributorsQueryKey(vars.masterId) }),
   });
+}
+
+export function useDecisionPoints(masterId: string, versionId: string, enabled = true): UseQueryResult<DecisionPoint[], ApiError> {
+  return useQuery({ queryKey: decisionPointsQueryKey(masterId, versionId), queryFn: () => listDecisionPoints(masterId, versionId), enabled: enabled && Boolean(masterId) && Boolean(versionId) });
+}
+type DecisionPointMutationVariables = { masterId: string; versionId: string; payload: Parameters<typeof createDecisionPoint>[2] };
+export function useCreateDecisionPoint(): UseMutationResult<DecisionPoint, ApiError, DecisionPointMutationVariables> {
+  const client = useQueryClient();
+  return useMutation({ mutationFn: ({ masterId, versionId, payload }) => createDecisionPoint(masterId, versionId, payload), onSuccess: (_, vars) => {
+    void client.invalidateQueries({ queryKey: decisionPointsQueryKey(vars.masterId, vars.versionId) });
+    void client.invalidateQueries({ queryKey: logicGraphQueryKey(vars.masterId, vars.versionId) });
+  } });
+}
+export function useUpdateDecisionPoint(): UseMutationResult<DecisionPoint, ApiError, DecisionPointMutationVariables & { pointId: string }> {
+  const client = useQueryClient();
+  return useMutation({ mutationFn: ({ masterId, versionId, pointId, payload }) => updateDecisionPoint(masterId, versionId, pointId, payload), onSuccess: (_, vars) => {
+    void client.invalidateQueries({ queryKey: decisionPointsQueryKey(vars.masterId, vars.versionId) });
+    void client.invalidateQueries({ queryKey: logicGraphQueryKey(vars.masterId, vars.versionId) });
+  } });
+}
+export function useDeleteDecisionPoint(): UseMutationResult<void, ApiError, { masterId: string; versionId: string; pointId: string }> {
+  const client = useQueryClient();
+  return useMutation({ mutationFn: ({ masterId, versionId, pointId }) => deleteDecisionPoint(masterId, versionId, pointId), onSuccess: (_, vars) => {
+    void client.invalidateQueries({ queryKey: decisionPointsQueryKey(vars.masterId, vars.versionId) });
+    void client.invalidateQueries({ queryKey: logicGraphQueryKey(vars.masterId, vars.versionId) });
+  } });
+}
+export function useMasterLogicGraph(masterId: string, versionId: string, enabled = true): UseQueryResult<MasterLogicGraph, ApiError> {
+  return useQuery({ queryKey: logicGraphQueryKey(masterId, versionId), queryFn: () => getMasterLogicGraph(masterId, versionId), enabled: enabled && Boolean(masterId) && Boolean(versionId) });
 }

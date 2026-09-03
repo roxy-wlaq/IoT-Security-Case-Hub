@@ -107,4 +107,7 @@ public class TestCaseVersionEntity extends BaseEntity {
 
     @OneToMany(mappedBy = "testCaseVersion", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<TestCaseAttachmentEntity> attachments = new ArrayList<>();
+
+    @OneToMany(mappedBy = "testCaseVersion", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<DecisionPointEntity> decisionPoints = new ArrayList<>();
 }

@@ -24,6 +24,9 @@
 所有写操作均需 CSRF（`X-XSRF-TOKEN`）。
 `POST /revisions` 返回 `201`；其余写操作返回 `200`。
 
+Phase 8 的 Decision Point / Master Logic Graph 追加契约见
+[`docs/phase8-api-contract.md`](./phase8-api-contract.md)。Phase 8 不创建 Project Runtime API。
+
 ---
 
 ## 2. 请求 DTO

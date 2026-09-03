@@ -65,6 +65,11 @@ public enum ErrorCode {
     TEST_CASE_REVISION_SOURCE_INVALID(HttpStatus.UNPROCESSABLE_ENTITY, "The revision source version is invalid."),
     TEST_CASE_CONTRIBUTOR_INVALID(HttpStatus.BAD_REQUEST, "The contributor is invalid or already added."),
 
+    // ---- Decision Point / Master DAG (Phase 8) ----
+    TEST_CASE_TRANSITION_TARGET_COUNT_INVALID(HttpStatus.UNPROCESSABLE_ENTITY, "The transition has an invalid number of targets."),
+    TEST_CASE_TRANSITION_TARGET_INVALID(HttpStatus.BAD_REQUEST, "One or more transition targets are invalid."),
+    TEST_CASE_DAG_CYCLE_DETECTED(HttpStatus.UNPROCESSABLE_ENTITY, "The master test case logic graph must not contain a cycle."),
+
     // ---- Generic (reused by later phases) ----
     VALIDATION_FAILED(HttpStatus.BAD_REQUEST, "Request validation failed."),
     RESOURCE_NOT_FOUND(HttpStatus.NOT_FOUND, "The requested resource was not found."),

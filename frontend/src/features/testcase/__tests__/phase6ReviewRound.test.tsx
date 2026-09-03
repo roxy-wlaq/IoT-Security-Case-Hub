@@ -5,7 +5,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { TestCaseDetailPage } from '@/features/testcase/pages/TestCaseDetailPage';
 import { TestCaseLibraryPage } from '@/features/testcase/pages/TestCaseLibraryPage';
 import { TestCaseDraftForm } from '@/features/testcase/components/TestCaseDraftForm';
-import { useTestCase, useTestCaseVersion, useTestCaseVersions, useTestCases, useReviewRecords, useContributors } from '@/features/testcase/hooks/useTestCases';
+import { useTestCase, useTestCaseVersion, useTestCaseVersions, useTestCases, useReviewRecords, useContributors, useDecisionPoints, useMasterLogicGraph } from '@/features/testcase/hooks/useTestCases';
 
 Object.defineProperty(window, 'matchMedia', {
   writable: true,
@@ -24,6 +24,11 @@ vi.mock('@/features/testcase/hooks/useTestCases', () => {
     useTestCaseVersion: vi.fn(),
     useReviewRecords: vi.fn(),
     useContributors: vi.fn(),
+    useDecisionPoints: vi.fn(),
+    useMasterLogicGraph: vi.fn(),
+    useCreateDecisionPoint: vi.fn(noopMutation),
+    useUpdateDecisionPoint: vi.fn(noopMutation),
+    useDeleteDecisionPoint: vi.fn(noopMutation),
     useSubmitReview: vi.fn(noopMutation),
     usePublish: vi.fn(noopMutation),
     useReturnReview: vi.fn(noopMutation),
@@ -63,6 +68,8 @@ describe('Phase 6 review round frontend behavior', () => {
     vi.mocked(useTestCaseVersion).mockReturnValue({ data: detail.visibleVersion, isLoading: false } as never);
     vi.mocked(useReviewRecords).mockReturnValue({ data: [], isLoading: false } as never);
     vi.mocked(useContributors).mockReturnValue({ data: [], isLoading: false } as never);
+    vi.mocked(useDecisionPoints).mockReturnValue({ data: [], isLoading: false, isError: false } as never);
+    vi.mocked(useMasterLogicGraph).mockReturnValue({ data: { testCaseVersionId: 'version-1', rootMasterTestCaseId: 'master-1', nodes: [], edges: [] }, isLoading: false, isError: false } as never);
   });
 
   it('libraryFilterState', async () => {

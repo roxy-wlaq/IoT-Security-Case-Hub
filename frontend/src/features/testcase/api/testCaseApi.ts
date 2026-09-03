@@ -9,6 +9,9 @@ import type {
   VersionSummary,
   SelectionMode,
   ProgressiveRole,
+  DecisionPoint,
+  MasterLogicGraph,
+  TransitionType,
 } from '@/shared/types/testCase';
 
 const TEST_CASE_BASE = '/test-cases';
@@ -115,5 +118,37 @@ export async function addContributor(masterId: string, userId: string): Promise<
 }
 export async function removeContributor(masterId: string, userId: string): Promise<Contributor[]> {
   const response = await httpClient.delete<Contributor[]>(`${TEST_CASE_BASE}/${masterId}/draft/contributors/${userId}`);
+  return response.data;
+}
+
+// ---------------------------------------------------------------------------
+// Phase 8 — Decision Point / Master Logic Graph
+// ---------------------------------------------------------------------------
+
+export interface DecisionPointPayload {
+  name: string;
+  description?: string;
+  displayOrder: number;
+  transitionType: TransitionType;
+  targetMasterTestCaseIds?: string[];
+}
+const versionLogicBase = (masterId: string, versionId: string) => `${TEST_CASE_BASE}/${masterId}/versions/${versionId}`;
+export async function listDecisionPoints(masterId: string, versionId: string): Promise<DecisionPoint[]> {
+  const response = await httpClient.get<DecisionPoint[]>(`${versionLogicBase(masterId, versionId)}/decision-points`);
+  return response.data;
+}
+export async function createDecisionPoint(masterId: string, versionId: string, payload: DecisionPointPayload): Promise<DecisionPoint> {
+  const response = await httpClient.post<DecisionPoint>(`${versionLogicBase(masterId, versionId)}/decision-points`, payload);
+  return response.data;
+}
+export async function updateDecisionPoint(masterId: string, versionId: string, pointId: string, payload: DecisionPointPayload): Promise<DecisionPoint> {
+  const response = await httpClient.put<DecisionPoint>(`${versionLogicBase(masterId, versionId)}/decision-points/${pointId}`, payload);
+  return response.data;
+}
+export async function deleteDecisionPoint(masterId: string, versionId: string, pointId: string): Promise<void> {
+  await httpClient.delete(`${versionLogicBase(masterId, versionId)}/decision-points/${pointId}`);
+}
+export async function getMasterLogicGraph(masterId: string, versionId: string): Promise<MasterLogicGraph> {
+  const response = await httpClient.get<MasterLogicGraph>(`${versionLogicBase(masterId, versionId)}/logic-graph`);
   return response.data;
 }

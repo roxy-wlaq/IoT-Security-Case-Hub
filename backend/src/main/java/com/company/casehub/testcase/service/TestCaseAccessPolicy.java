@@ -154,6 +154,16 @@ public class TestCaseAccessPolicy {
                 .orElse(false);
     }
 
+    public boolean canEditDraftVersionById(UUID masterId, UUID versionId, UserPrincipal principal) {
+        return masterRepository.findById(masterId)
+                .flatMap(master -> master.getVersions().stream()
+                        .filter(version -> Objects.equals(version.getId(), versionId))
+                        .filter(version -> version.getStatus() == TestCaseVersionStatus.DRAFT && !version.isRevisionClosed())
+                        .findFirst())
+                .map(version -> canEditDraft(version, principal))
+                .orElse(false);
+    }
+
     /**
      * Controller-level pre-authorization helper for Submit Review. This is
      * intentionally independent from {@link #canEditDraftById(UUID, UserPrincipal)}.

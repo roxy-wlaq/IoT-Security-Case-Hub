@@ -19,6 +19,7 @@ import {
 } from '@/features/testcase/hooks/useTestCases';
 import { toApiError } from '@/shared/api/apiError';
 import type { ReviewRecordAction, TestCaseStatus, VersionSummary } from '@/shared/types/testCase';
+import { DecisionPointEditor } from '@/features/testcase/components/DecisionPointEditor';
 
 const formatDate = (value?: string | null) => (value ? new Date(value).toLocaleString() : '—');
 
@@ -237,6 +238,12 @@ export function TestCaseDetailPage() {
           )}
         />
       </Card>
+
+      <DecisionPointEditor
+        masterId={masterId}
+        versionId={version.id}
+        readOnly={!actions.editDraft || version.id !== detail.draftVersion?.id}
+      />
 
       <Card title="评审记录">
         {reviewRecords && reviewRecords.length > 0 ? (
