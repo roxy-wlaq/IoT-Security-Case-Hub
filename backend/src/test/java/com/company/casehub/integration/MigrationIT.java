@@ -118,7 +118,7 @@ class MigrationIT extends AbstractIntegrationTest {
     }
 
     @Test
-    void phase8MigrationCreatesOnlyMasterDagTables() {
+    void batch3MigrationCreatesExecutionStackTables() {
         Integer phase8Tables = jdbcTemplate.queryForObject(
                 "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'casehub' "
                         + "AND table_name IN ('decision_points','transitions','transition_targets')", Integer.class);
@@ -127,9 +127,9 @@ class MigrationIT extends AbstractIntegrationTest {
                 "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'casehub' "
                         + "AND table_name IN ('project_decision_selections','branch_outcomes',"
                         + "'project_test_case_triggers','evidence','notes')", Integer.class);
-        assertThat(runtimeTables).isZero();
+        assertThat(runtimeTables).isEqualTo(5);
         assertThat(jdbcTemplate.queryForObject(
-                "SELECT count(*) FROM casehub.flyway_schema_history WHERE version = '009'", Integer.class)).isEqualTo(1);
+                "SELECT count(*) FROM casehub.flyway_schema_history WHERE version = '016'", Integer.class)).isEqualTo(1);
     }
 
     @Test

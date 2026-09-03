@@ -89,7 +89,7 @@ public class ProjectTestPlanService {
             entity.setMasterTestCase(master);
             entity.setTestCaseVersion(version);
             entity.setCreatedBy(actor);
-            entity.setRoot(false);
+            entity.setRoot(source != ProjectTestCaseSourceType.PROGRESSIVE);
         } else {
             entity.setTestCaseVersion(version);
             entity.setRemoved(false);

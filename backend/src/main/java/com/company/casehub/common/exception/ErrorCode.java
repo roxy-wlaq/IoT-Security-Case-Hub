@@ -85,6 +85,23 @@ public enum ErrorCode {
     PROJECT_TEST_CASE_ASSIGNEE_INVALID(HttpStatus.BAD_REQUEST, "A Project Test Case assignee must be a TESTER."),
     PROJECT_TEST_CASE_ACCESS_FORBIDDEN(HttpStatus.FORBIDDEN, "You cannot modify this Project Test Case."),
 
+    // ---- Execution Stack (Phase 15-20) ----
+    STORAGE_KEY_INVALID(HttpStatus.BAD_REQUEST, "The storage key is invalid."),
+    STORAGE_OBJECT_MISSING(HttpStatus.NOT_FOUND, "The stored object is missing."),
+    EVIDENCE_NOT_FOUND(HttpStatus.NOT_FOUND, "Evidence not found."),
+    EVIDENCE_UPLOAD_FORBIDDEN(HttpStatus.FORBIDDEN, "Only an assigned Tester can upload Evidence."),
+    EVIDENCE_DOWNLOAD_FORBIDDEN(HttpStatus.FORBIDDEN, "You cannot download this Evidence."),
+    EVIDENCE_DELETE_FORBIDDEN(HttpStatus.FORBIDDEN, "Only an assigned Tester can delete this Evidence."),
+    EVIDENCE_REQUIRED(HttpStatus.UNPROCESSABLE_ENTITY, "Evidence is required before completion."),
+    NOTE_NOT_FOUND(HttpStatus.NOT_FOUND, "Note not found."),
+    NOTE_EDIT_FORBIDDEN(HttpStatus.FORBIDDEN, "You can only edit or delete your own Note."),
+    EXECUTION_FORBIDDEN(HttpStatus.FORBIDDEN, "Only an assigned Tester can execute this Project Test Case."),
+    EXECUTION_INVALID_STATE(HttpStatus.CONFLICT, "The Project Test Case is not in a valid execution state."),
+    EXECUTION_SELECTION_INVALID(HttpStatus.UNPROCESSABLE_ENTITY, "The selected Decision Points are invalid."),
+    EXECUTION_DECISION_NOT_FOUND(HttpStatus.NOT_FOUND, "Decision Point not found."),
+    TRIGGER_NOT_FOUND(HttpStatus.NOT_FOUND, "Runtime Trigger not found."),
+    RELATION_ACTION_INVALID(HttpStatus.BAD_REQUEST, "The relation update action is invalid."),
+
     // ---- Generic (reused by later phases) ----
     VALIDATION_FAILED(HttpStatus.BAD_REQUEST, "Request validation failed."),
     RESOURCE_NOT_FOUND(HttpStatus.NOT_FOUND, "The requested resource was not found."),

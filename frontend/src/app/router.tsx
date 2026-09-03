@@ -19,6 +19,7 @@ import { TestCaseDetailPage } from '@/features/testcase/pages/TestCaseDetailPage
 import { ProjectPage } from '@/features/project/pages/ProjectPage';
 import { GenerationRulePage } from '@/features/generation/pages/GenerationRulePage';
 import { MyTestsPage } from '@/features/project/pages/MyTestsPage';
+import { ExecutionPage } from '@/features/execution/pages/ExecutionPage';
 
 /**
  * 已实现模块的页面映射（Phase 4 基础字典 / Phase 5 能力库）。
@@ -52,6 +53,7 @@ const protectedRoutes = [
   { path: 'test-cases/new', element: <RouteGuard permission="test_case:draft_create"><TestCaseDraftPage /></RouteGuard> },
   { path: 'test-cases/:masterId', element: <RouteGuard permission="test_case:read"><TestCaseDetailPage /></RouteGuard> },
   { path: 'test-cases/:masterId/edit', element: <RouteGuard permission="test_case:read"><TestCaseDraftPage /></RouteGuard> },
+  { path: 'my-tests/:projectTestCaseId', element: <RouteGuard permission="project_test_case:read"><ExecutionPage /></RouteGuard> },
   { path: '403', element: <Forbidden /> },
   { path: '*', element: <NotFound /> },
 ];
