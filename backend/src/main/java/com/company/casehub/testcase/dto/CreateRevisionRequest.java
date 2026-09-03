@@ -9,7 +9,8 @@ import java.util.UUID;
  * major and the new minor is MAX(minor of all versions with that major) + 1,
  * computed inside a PESSIMISTIC_WRITE-locked Master transaction.
  *
- * @param sourceVersionId optional; when omitted the current PUBLISHED version is used
+ * @param sourceVersionId optional; when omitted the current PUBLISHED version is preferred,
+ *                        otherwise an authorised closed REVIEW source is selected
  * @param changeReason    optional human-readable reason for the revision
  */
 public record CreateRevisionRequest(UUID sourceVersionId, @Size(max = 2000) String changeReason) {

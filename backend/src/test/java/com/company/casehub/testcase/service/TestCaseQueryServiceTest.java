@@ -164,6 +164,30 @@ class TestCaseQueryServiceTest {
     }
 
     @Test
+    void newestVisibleVersionWinsWhenHistoricalPublishedIsNotCurrent() {
+        UUID userId = UUID.randomUUID();
+        UserEntity user = user(userId);
+        MasterTestCaseEntity master = master(user, "BLE-002");
+        TestCaseVersionEntity historicalPublished = version(user, master, TestCaseVersionStatus.PUBLISHED, "Historical Published");
+        historicalPublished.setCurrentVersion(false);
+        historicalPublished.setVersionMinor(0);
+        TestCaseVersionEntity deprecated = version(user, master, TestCaseVersionStatus.DEPRECATED, "Newest Deprecated");
+        deprecated.setCurrentVersion(false);
+        deprecated.setVersionMinor(1);
+        master.setVersions(List.of(historicalPublished, deprecated));
+        when(masterRepository.findById(master.getId())).thenReturn(Optional.of(master));
+        when(reviewRecordRepository.findFirstByTestCaseVersionIdOrderByCreatedAtDescIdDesc(any())).thenReturn(Optional.empty());
+        when(accessPolicy.isVersionVisible(any(), any(), any())).thenReturn(true);
+
+        TestCaseDetailResponse response = service.detail(master.getId(), principal(userId, "TESTER"));
+
+        assertThat(response.currentVersion()).isNull();
+        assertThat(response.visibleVersion().caseName()).isEqualTo("Newest Deprecated");
+        assertThat(response.versions()).extracting("versionLabel", "status")
+                .containsExactly(tuple("1.1", "DEPRECATED"), tuple("1.0", "PUBLISHED"));
+    }
+
+    @Test
     void listFailsWhenDatabaseRowCannotBeHydrated() {
         UUID userId = UUID.randomUUID();
         UserEntity user = user(userId);

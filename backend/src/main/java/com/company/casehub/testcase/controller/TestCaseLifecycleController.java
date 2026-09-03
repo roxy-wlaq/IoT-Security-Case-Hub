@@ -44,7 +44,7 @@ public class TestCaseLifecycleController {
     }
 
     @PostMapping("/{masterId}/draft/submit-review")
-    @PreAuthorize("hasAuthority('test_case:submit_review') or @testCaseAccessPolicy.canEditDraftById(#masterId, principal)")
+    @PreAuthorize("hasAuthority('test_case:submit_review') and @testCaseAccessPolicy.canSubmitReviewById(#masterId, principal)")
     public TestCaseDetailResponse submitReview(@PathVariable UUID masterId,
                                                 @RequestBody(required = false) LifecycleActionRequest request,
                                                 @AuthenticationPrincipal UserPrincipal principal) {

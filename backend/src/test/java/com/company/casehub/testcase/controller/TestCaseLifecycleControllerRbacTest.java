@@ -59,8 +59,8 @@ class TestCaseLifecycleControllerRbacTest {
 
     @Test
     void testerCannotSubmitReview() throws Exception {
-        // A plain TESTER (no submit_review authority, no contributor membership) hits the
-        // permission-code gate (false) and the resource-level gate canEditDraftById (false).
+        // A plain TESTER (no submit_review authority, no contributor membership) is
+        // blocked by the Submit Review permission/resource gates.
         mockMvc.perform(post("/api/v1/test-cases/{masterId}/draft/submit-review", MASTER_ID)
                         .with(user(tester())).with(csrf())
                         .contentType("application/json")
@@ -70,20 +70,16 @@ class TestCaseLifecycleControllerRbacTest {
     }
 
     @Test
-    void testerContributorCanSubmitReview() throws Exception {
-        // HIGH-02: a TESTER contributor with no global test_case:submit_review authority may
-        // still submit the assigned draft because the resource-level gate (canEditDraftById)
-        // resolves to true for them.
+    void testerContributorCannotSubmitReviewThroughEditGate() throws Exception {
+        // HIGH-04: contributor edit membership must never bypass the Submit Review permission.
         when(accessPolicy.canEditDraftById(any(), any())).thenReturn(true);
-        doReturn(detailResponse()).when(lifecycleService)
-                .submitReview(eq(MASTER_ID), any(), any());
 
         mockMvc.perform(post("/api/v1/test-cases/{masterId}/draft/submit-review", MASTER_ID)
                         .with(user(testerContributor())).with(csrf())
                         .contentType("application/json")
                         .content("{\"comment\":\"tester submit\"}"))
-                .andExpect(status().isOk());
-        verify(lifecycleService).submitReview(eq(MASTER_ID), any(), any());
+                .andExpect(status().isForbidden());
+        verifyNoInteractions(lifecycleService);
     }
 
     @Test
@@ -160,6 +156,7 @@ class TestCaseLifecycleControllerRbacTest {
 
     @Test
     void coordinatorCanSubmitReview() throws Exception {
+        when(accessPolicy.canSubmitReviewById(any(), any())).thenReturn(true);
         doReturn(detailResponse()).when(lifecycleService)
                 .submitReview(eq(MASTER_ID), any(), any());
 

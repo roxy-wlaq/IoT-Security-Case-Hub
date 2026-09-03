@@ -1256,7 +1256,8 @@ Admin
 Contributor Tester：
 
 ```text
-可经资源级闸门提交（HIGH-02）——canEditDraftById 为真即放行；无关 Tester（非 owner / 非 contributor / 非 admin）不能 Submit Review
+只获得该 Draft 的 Edit 权限
+不因 contributor membership 获得 Submit Review
 ```
 
 ---

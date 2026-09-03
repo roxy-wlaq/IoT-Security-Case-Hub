@@ -63,7 +63,7 @@ class TestCaseAccessPolicyTest {
     }
 
     @Test
-    void canEditOrSubmitAllowsAdminOwnerAndContributor() {
+    void editAndSubmitUseIndependentResourceRules() {
         UUID ownerId = UUID.randomUUID();
         UUID contributorId = UUID.randomUUID();
         UserEntity owner = user(ownerId);
@@ -71,22 +71,30 @@ class TestCaseAccessPolicyTest {
 
         when(contributorRepository.existsByTestCaseVersionIdAndUserId(draft.getId(), contributorId)).thenReturn(true);
 
-        // admin short-circuits before isContributor is called
-        assertThat(policy.canEditOrSubmit(draft, admin())).isTrue();
-        // owner short-circuits before isContributor is called
-        assertThat(policy.canEditOrSubmit(draft, principal(ownerId, "TEST_COORDINATOR"))).isTrue();
-        // contributor is confirmed via repository
-        assertThat(policy.canEditOrSubmit(draft, principal(contributorId, "TESTER"))).isTrue();
+        // ADMIN and owner may edit; contributor membership also grants edit.
+        assertThat(policy.canEditDraft(draft, admin())).isTrue();
+        assertThat(policy.canEditDraft(draft, principal(ownerId, "TEST_COORDINATOR"))).isTrue();
+        assertThat(policy.canEditDraft(draft, principal(contributorId, "TESTER"))).isTrue();
+
+        // Submit requires the lifecycle permission and a legitimate owner/admin actor;
+        // contributor membership never grants Submit Review.
+        assertThat(policy.canSubmitReview(draft, admin())).isTrue();
+        assertThat(policy.canSubmitReview(draft,
+                principal(ownerId, "TEST_COORDINATOR", "test_case:submit_review"))).isTrue();
+        assertThat(policy.canSubmitReview(draft,
+                principal(contributorId, "TESTER", "test_case:submit_review"))).isFalse();
     }
 
     @Test
-    void canEditOrSubmitDeniesNonOwnerNonContributor() {
+    void editAndSubmitDenyNonOwnerNonContributor() {
         UUID ownerId = UUID.randomUUID();
         UserEntity owner = user(ownerId);
         TestCaseVersionEntity draft = version(owner, TestCaseVersionStatus.DRAFT);
 
         // No stub — Mockito defaults boolean to false
-        assertThat(policy.canEditOrSubmit(draft, principal(UUID.randomUUID(), "TESTER"))).isFalse();
+        UserPrincipal unrelated = principal(UUID.randomUUID(), "TESTER", "test_case:submit_review");
+        assertThat(policy.canEditDraft(draft, unrelated)).isFalse();
+        assertThat(policy.canSubmitReview(draft, unrelated)).isFalse();
     }
 
     @Test
@@ -122,6 +130,25 @@ class TestCaseAccessPolicyTest {
         assertThat(actions.createRevision()).isFalse();
         assertThat(actions.publish()).isFalse();
         assertThat(actions.reject()).isFalse();
+    }
+
+    @Test
+    void buildAllowedActionsForContributorEnablesEditButNotSubmit() {
+        UUID ownerId = UUID.randomUUID();
+        UUID contributorId = UUID.randomUUID();
+        UserEntity owner = user(ownerId);
+        MasterTestCaseEntity master = new MasterTestCaseEntity();
+        master.setVersions(new java.util.ArrayList<>());
+        TestCaseVersionEntity draft = version(owner, TestCaseVersionStatus.DRAFT);
+        draft.setRevisionClosed(false);
+        master.getVersions().add(draft);
+        when(contributorRepository.existsByTestCaseVersionIdAndUserId(draft.getId(), contributorId)).thenReturn(true);
+
+        AllowedActions actions = policy.buildAllowedActions(master, draft, draft,
+                principal(contributorId, "TESTER", "test_case:submit_review"));
+
+        assertThat(actions.editDraft()).isTrue();
+        assertThat(actions.submitReview()).isFalse();
     }
 
     @Test
@@ -315,6 +342,22 @@ class TestCaseAccessPolicyTest {
 
         // Unrelated user: no open draft and not a member → false.
         assertThat(policy.canEditDraftById(master.getId(), principal(UUID.randomUUID(), "TESTER"))).isFalse();
+    }
+
+    @Test
+    void canSubmitReviewByIdDoesNotReuseEditMembership() {
+        UUID ownerId = UUID.randomUUID();
+        UUID contributorId = UUID.randomUUID();
+        UserEntity owner = user(ownerId);
+        TestCaseVersionEntity draft = version(owner, TestCaseVersionStatus.DRAFT);
+        draft.setRevisionClosed(false);
+        MasterTestCaseEntity master = masterWith(List.of(draft));
+        when(masterRepository.findById(master.getId())).thenReturn(Optional.of(master));
+        when(contributorRepository.existsByTestCaseVersionIdAndUserId(draft.getId(), contributorId)).thenReturn(true);
+
+        UserPrincipal contributor = principal(contributorId, "TESTER", "test_case:submit_review");
+        assertThat(policy.canEditDraftById(master.getId(), contributor)).isTrue();
+        assertThat(policy.canSubmitReviewById(master.getId(), contributor)).isFalse();
     }
 
     private UserEntity user(UUID id) {

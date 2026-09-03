@@ -10,7 +10,7 @@ Close the static-review findings HIGH-04, HIGH-05, MEDIUM-04, and MEDIUM-05 whil
 
 `TestCaseAccessPolicy` will expose independent decisions for editing an open Draft and submitting an open Draft. Draft editing remains a resource decision: ADMIN, the Draft owner, or a revision contributor may edit. Submit Review is a separate decision: the principal must have `test_case:submit_review` and be an ADMIN or the Draft owner; contributor membership alone never grants submit authority.
 
-The update-Draft controller keeps its edit-specific resource helper. The Submit Review controller uses only the submit permission-code gate, and `TestCaseLifecycleService.submitReview` independently calls the submit-specific policy. `AllowedActions` uses the same independent edit and submit decisions so a contributor is represented as editable but not submittable.
+The update-Draft controller keeps its edit-specific resource helper. The Submit Review controller combines the submit permission-code gate with a submit-specific resource helper; it never uses the edit helper. `TestCaseLifecycleService.submitReview` independently calls the submit-specific policy. `AllowedActions` uses the same independent edit and submit decisions so a contributor is represented as editable but not submittable.
 
 ### Revision source authorization
 

@@ -77,7 +77,7 @@ class TestCaseLifecycleServiceTest {
     @BeforeEach
     void stubAuthorized() {
         lenient().when(accessPolicy.isVersionVisible(any(), any(), any())).thenReturn(true);
-        lenient().when(accessPolicy.canEditOrSubmit(any(), any())).thenReturn(true);
+        lenient().when(accessPolicy.canSubmitReview(any(), any())).thenReturn(true);
     }
 
     // -------------------------------------------------------------------------
@@ -94,7 +94,7 @@ class TestCaseLifecycleServiceTest {
         when(masterRepository.findById(masterId)).thenReturn(Optional.of(master));
         when(versionRepository.findFirstByMasterTestCaseIdAndStatusOrderByVersionMajorDescVersionMinorDesc(
                 masterId, TestCaseVersionStatus.DRAFT)).thenReturn(Optional.of(draft));
-        when(accessPolicy.canEditOrSubmit(eq(draft), any())).thenReturn(true);
+        when(accessPolicy.canSubmitReview(eq(draft), any())).thenReturn(true);
         when(userRepository.findById(owner.getId())).thenReturn(Optional.of(owner));
 
         service.submitReview(masterId, new LifecycleActionRequest("looks good"), principal(owner.getId()));
@@ -148,7 +148,7 @@ class TestCaseLifecycleServiceTest {
         when(masterRepository.findById(masterId)).thenReturn(Optional.of(master));
         when(versionRepository.findFirstByMasterTestCaseIdAndStatusOrderByVersionMajorDescVersionMinorDesc(
                 masterId, TestCaseVersionStatus.DRAFT)).thenReturn(Optional.of(draft));
-        when(accessPolicy.canEditOrSubmit(eq(draft), any())).thenReturn(false);
+        when(accessPolicy.canSubmitReview(eq(draft), any())).thenReturn(false);
 
         assertThatThrownBy(() -> service.submitReview(masterId, new LifecycleActionRequest(null),
                 principal(UUID.randomUUID())))
@@ -167,7 +167,7 @@ class TestCaseLifecycleServiceTest {
         when(masterRepository.findById(masterId)).thenReturn(Optional.of(master));
         when(versionRepository.findFirstByMasterTestCaseIdAndStatusOrderByVersionMajorDescVersionMinorDesc(
                 masterId, TestCaseVersionStatus.DRAFT)).thenReturn(Optional.of(draft));
-        when(accessPolicy.canEditOrSubmit(eq(draft), any())).thenReturn(true);
+        when(accessPolicy.canSubmitReview(eq(draft), any())).thenReturn(true);
 
         assertThatThrownBy(() -> service.submitReview(masterId, new LifecycleActionRequest(null), principal(owner.getId())))
                 .isInstanceOf(BusinessRuleException.class)
@@ -422,6 +422,67 @@ class TestCaseLifecycleServiceTest {
         assertThat(revision.getSteps()).extracting("title").containsExactly("Prepare", "Execute");
         assertThat(revision.getTools()).hasSize(1);
         assertThat(revision.getTools().get(0).getTool()).isEqualTo(tool);
+    }
+
+    @Test
+    void createRevisionFromCurrentPublishedDoesNotRequirePrivateSourceMembership() {
+        UUID masterId = UUID.randomUUID();
+        UserEntity owner = user(UUID.randomUUID());
+        UserEntity actor = user(UUID.randomUUID());
+        TestCaseVersionEntity published = version(owner, TestCaseVersionStatus.PUBLISHED, 1, 0);
+        published.setCurrentVersion(true);
+        MasterTestCaseEntity master = master(masterId, owner);
+        master.setVersions(new ArrayList<>(List.of(published)));
+        when(masterRepository.findByIdWithLock(masterId)).thenReturn(Optional.of(master));
+        when(userRepository.findById(actor.getId())).thenReturn(Optional.of(actor));
+
+        service.createRevision(masterId, new CreateRevisionRequest(null, "public source"),
+                principal(actor.getId()));
+
+        ArgumentCaptor<TestCaseVersionEntity> versionCaptor = ArgumentCaptor.forClass(TestCaseVersionEntity.class);
+        verify(versionRepository).save(versionCaptor.capture());
+        assertThat(versionCaptor.getValue().getBasedOnVersion()).isEqualTo(published);
+    }
+
+    @Test
+    void createRevisionFromRejectedSourceRequiresDedicatedResourceAuthorization() {
+        UUID masterId = UUID.randomUUID();
+        UserEntity owner = user(UUID.randomUUID());
+        TestCaseVersionEntity rejected = version(owner, TestCaseVersionStatus.REVIEW, 1, 0);
+        rejected.setRevisionClosed(true);
+        MasterTestCaseEntity master = master(masterId, owner);
+        master.setVersions(new ArrayList<>(List.of(rejected)));
+        when(masterRepository.findByIdWithLock(masterId)).thenReturn(Optional.of(master));
+        UserPrincipal unrelated = principal(UUID.randomUUID());
+        when(accessPolicy.canUseRejectedRevisionSource(rejected, unrelated)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.createRevision(masterId,
+                new CreateRevisionRequest(rejected.getId(), "unauthorised source"),
+                unrelated))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.TEST_CASE_REVISION_SOURCE_INVALID);
+        verify(versionRepository, never()).save(any());
+    }
+
+    @Test
+    void authorizedRejectedSourceCanCreateRevision() {
+        UUID masterId = UUID.randomUUID();
+        UserEntity owner = user(UUID.randomUUID());
+        UserEntity actor = user(UUID.randomUUID());
+        TestCaseVersionEntity rejected = version(owner, TestCaseVersionStatus.REVIEW, 1, 0);
+        rejected.setRevisionClosed(true);
+        MasterTestCaseEntity master = master(masterId, owner);
+        master.setVersions(new ArrayList<>(List.of(rejected)));
+        when(masterRepository.findByIdWithLock(masterId)).thenReturn(Optional.of(master));
+        UserPrincipal contributor = principal(actor.getId());
+        when(accessPolicy.canUseRejectedRevisionSource(rejected, contributor)).thenReturn(true);
+        when(userRepository.findById(actor.getId())).thenReturn(Optional.of(actor));
+
+        service.createRevision(masterId, new CreateRevisionRequest(rejected.getId(), "authorised source"), contributor);
+
+        ArgumentCaptor<TestCaseVersionEntity> versionCaptor = ArgumentCaptor.forClass(TestCaseVersionEntity.class);
+        verify(versionRepository).save(versionCaptor.capture());
+        assertThat(versionCaptor.getValue().getBasedOnVersion()).isEqualTo(rejected);
     }
 
     @Test

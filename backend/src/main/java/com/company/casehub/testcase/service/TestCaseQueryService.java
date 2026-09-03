@@ -160,16 +160,12 @@ public class TestCaseQueryService {
     private TestCaseVersionEntity visibleVersion(MasterTestCaseEntity master, UserPrincipal principal) {
         List<TestCaseVersionEntity> visible = visibleVersions(master, principal);
         if (visible.isEmpty()) return null;
-        if (isAdmin(principal)) {
-            return visible.stream().filter(v -> v.isCurrentVersion() && v.getStatus() == TestCaseVersionStatus.PUBLISHED)
-                    .findFirst().orElseGet(() -> latest(visible));
-        }
-        TestCaseVersionEntity published = visible.stream().filter(v -> v.getStatus() == TestCaseVersionStatus.PUBLISHED).findFirst().orElse(null);
-        if (published != null) return published;
-        TestCaseVersionEntity draft = visible.stream().filter(v -> v.getStatus() == TestCaseVersionStatus.DRAFT).findFirst().orElse(null);
-        if (draft != null) return draft;
-        // Submitter/contributor may still see their own REVIEW/DEPRECATED version after it left DRAFT.
-        return latest(visible);
+        // The current PUBLISHED version is the primary version. Once it is
+        // deprecated, no historical PUBLISHED version may reclaim that role;
+        // select the newest visible version instead. This is the same ordering
+        // used by the database-backed library query.
+        return visible.stream().filter(v -> v.isCurrentVersion() && v.getStatus() == TestCaseVersionStatus.PUBLISHED)
+                .findFirst().orElseGet(() -> latest(visible));
     }
 
     private TestCaseVersionEntity latestVisible(MasterTestCaseEntity master, UserPrincipal principal, TestCaseVersionStatus status) {

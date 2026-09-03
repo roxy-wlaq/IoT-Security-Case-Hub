@@ -8,7 +8,7 @@ package com.company.casehub.testcase.dto;
  *
  * @param editDraft          DRAFT ∧ revision_closed=false ∧ (ADMIN ∨ owner ∨ contributor)
  * @param createDraft        permission test_case:draft_create
- * @param submitReview       DRAFT ∧ revision_closed=false ∧ (ADMIN ∨ owner ∨ contributor)
+ * @param submitReview       DRAFT ∧ revision_closed=false ∧ submit permission ∧ (ADMIN ∨ owner)
  * @param publish            REVIEW ∧ revision_closed=false ∧ test_case:publish
  * @param returnReview       REVIEW ∧ revision_closed=false ∧ test_case:review (field avoids TS keyword)
  * @param reject             REVIEW ∧ revision_closed=false ∧ test_case:review

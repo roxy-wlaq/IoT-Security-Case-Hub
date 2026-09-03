@@ -43,7 +43,7 @@
 
 ```jsonc
 {
-  "sourceVersionId": "uuid, optional — 省略时使用当前 current PUBLISHED 版本",
+  "sourceVersionId": "uuid, optional — 明确指定 PUBLISHED 或授权的 closed REVIEW；省略时优先使用当前 current PUBLISHED，否则使用授权的 closed REVIEW",
   "changeReason": "string, optional, 最大 2000"
 }
 ```
@@ -85,14 +85,14 @@ interface AllowedActions {
 
 | 字段 | 条件 |
 |---|---|
-| `editDraft` | 权限 `test_case:draft_edit` ∧ 目标版本 `status=DRAFT` ∧ `revision_closed=false` ∧ (ADMIN ∨ owner ∨ contributor) |
+| `editDraft` | 目标版本 `status=DRAFT` ∧ `revision_closed=false` ∧ (ADMIN ∨ owner ∨ contributor)；Contributor 的资源级授权仅限 Edit |
 | `createDraft` | 权限 `test_case:draft_create` |
-| `submitReview` | 权限 `test_case:submit_review` ∧ 存在 DRAFT ∧ `revision_closed=false` ∧ (ADMIN ∨ owner ∨ contributor) |
+| `submitReview` | 权限 `test_case:submit_review` ∧ 存在 DRAFT ∧ `revision_closed=false` ∧ (ADMIN ∨ owner)；Contributor membership 不授予 Submit |
 | `publish` | 权限 `test_case:review` ∧ `test_case:publish` ∧ 目标版本 `status=REVIEW` ∧ `revision_closed=false` |
 | `returnReview` | 权限 `test_case:review` ∧ 目标版本 `status=REVIEW` ∧ `revision_closed=false` |
 | `reject` | 权限 `test_case:review` ∧ 目标版本 `status=REVIEW` ∧ `revision_closed=false` |
 | `deprecate` | 权限 `test_case:deprecate` ∧ 目标版本 `status=PUBLISHED` |
-| `createRevision` | 权限 `test_case:draft_create` ∧ 存在 current PUBLISHED 版本 |
+| `createRevision` | 权限 `test_case:draft_create` ∧（存在 current PUBLISHED，或存在调用方有资源级授权的 `REVIEW ∧ revision_closed=true` 版本） |
 | `manageContributors` | 权限 `test_case:draft_edit` ∧ 存在 DRAFT ∧ `revision_closed=false` ∧ (ADMIN ∨ owner) |
 
 ### 3.2 TestCaseVersionResponse（Phase 6 已有，Phase 7 **扩展 1 字段**）
@@ -151,6 +151,7 @@ interface ContributorResponse {
 
 - **前置**：`status = DRAFT`、`revision_closed = false`、权限 + 资源级通过、必要字段完整
   （`caseName` 非空、至少 1 个 Step、`selectionMode` 合法）。
+- **授权**：Controller 要求 `test_case:submit_review`；Service 再要求调用方是 ADMIN 或该 Draft owner。Revision Contributor 只有 Edit，不得仅凭 contributor membership Submit。
 - **写入**：`status = REVIEW`；`ReviewRecord(action=SUBMIT, reviewer=当前用户, comment)`。
 - **后续**：该版本不再能通过 `PUT /{masterId}/draft` 编辑（`editDraft=false`），
   除非先 Return。
@@ -191,8 +192,10 @@ interface ContributorResponse {
 
 ### 4.6 Create Revision
 
-- **前置**：`sourceVersionId`（省略则取 current PUBLISHED）指向的 Version `status = PUBLISHED`、
-  权限 `test_case:draft_create`。
+- **前置**：权限 `test_case:draft_create`。明确 source 时，PUBLISHED 按公开版本规则处理；
+  `REVIEW ∧ revision_closed=true` 必须通过 source owner/contributor/ADMIN 资源级授权；其它状态拒绝。
+  省略 source 时优先取 current PUBLISHED，不因 source 省略而增加私有资源限制；没有 current PUBLISHED 时，
+  只从调用方有授权的 closed REVIEW 中选择最新版本，否则拒绝。
 - **写入（同一事务，PESSIMISTIC_WRITE 锁定 Master 行）**：
   1. 新 `TestCaseVersion`：`master_test_case_id` = 同一 Master、
      `based_on_version_id` = source、`status = DRAFT`、`revision_closed = false`、
@@ -205,7 +208,12 @@ interface ContributorResponse {
   5. **Master-level Tags 不复制**（Tag 属 Master，不是 Version 级）
   6. **Attachment metadata 不复制**（见实施计划 §4.2：`storage_key` 全局 UNIQUE，
      Phase 15 Storage 再定义语义）
-- **不变**：source PUBLISHED 版本任何字段不被修改。
+- **不变**：source PUBLISHED 或 rejected REVIEW 版本任何业务内容不被修改。
+
+### 4.7 Library List / Detail 默认版本
+
+- List 与 Detail 使用相同的主版本选择：current PUBLISHED 优先；不存在时选择可见版本中版本号最高者。
+- current PUBLISHED 被 Deprecated 后，`currentVersion = null`，最新 DEPRECATED 版本成为 List/Detail 的 primary/default；历史 PUBLISHED 仍在 history 中，但不重新成为 current/default。
 
 ---
 
@@ -229,8 +237,8 @@ interface ContributorResponse {
 | `TEST_CASE_DRAFT_REQUIRED` | 409 | Master 无 `revision_closed = false` 的 DRAFT 时执行 Submit/Publish/Return/Reject（如 Reject 已关闭唯一修订后再次提交评审） |
 | `TEST_CASE_REVIEW_COMMENT_REQUIRED` | 400 | Return / Reject 未提供 comment |
 | `TEST_CASE_DRAFT_INCOMPLETE` | 422 | Submit Review 时必要字段缺失（无 caseName 或无 Step） |
-| `TEST_CASE_LIFECYCLE_FORBIDDEN` | 403 | 资源级权限不通过（非 owner / 非 contributor / 非 ADMIN） |
-| `TEST_CASE_REVISION_SOURCE_INVALID` | 422 | Create Revision 的 source 版本不存在/不是 PUBLISHED，或省略 sourceVersionId 时调用方对该默认源无资源级编辑权限（HIGH-05） |
+| `TEST_CASE_LIFECYCLE_FORBIDDEN` | 403 | 资源级权限不通过（Submit 不是 ADMIN/owner，Edit 不是 owner/contributor/ADMIN） |
+| `TEST_CASE_REVISION_SOURCE_INVALID` | 422 | Create Revision 的 source 不是 PUBLISHED 或授权的 closed REVIEW，或没有可授权的默认 source（HIGH-05） |
 | `TEST_CASE_CONTRIBUTOR_INVALID` | 400 | 贡献者用户不存在 / 未启用 / 重复添加 |
 | `TEST_CASE_VERSION_IMMUTABLE` | 409 | Published Immutable（Phase 6 已有，Phase 7 复用） |
 

@@ -372,9 +372,8 @@ class TestCaseLifecycleIT extends AbstractIntegrationTest {
                 other.getDisplayName(), true, false, Set.of("TEST_COORDINATOR"),
                 Set.of("test_case:read", "test_case:draft_create", "test_case:draft_edit", "test_case:submit_review"));
 
-        // Other coordinator cannot submit a draft they don't own — the resource-level gate
-        // (canEditOrSubmit) forbids it. submitReview finds the DRAFT by masterId+status (visibility is
-        // not checked at this layer) and then canEditOrSubmit returns false → FORBIDDEN.
+        // Other coordinator cannot submit a draft they don't own — the independent
+        // Submit resource gate rejects it.
         assertThatThrownBy(() -> lifecycleService.submitReview(
                 masterId, new LifecycleActionRequest("submit"), otherPrincipal))
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.TEST_CASE_LIFECYCLE_FORBIDDEN);
@@ -481,16 +480,20 @@ class TestCaseLifecycleIT extends AbstractIntegrationTest {
         lifecycleService.addContributor(
                 masterId, new com.company.casehub.testcase.dto.AddContributorRequest(contributor.getId()), coordinatorPrincipal);
 
-        // Contributor can now see and submit the draft they don't own
+        // Contributor can edit the draft they don't own, but contributor membership
+        // does not grant Submit Review.
         UserPrincipal contributorPrincipal = new UserPrincipal(contributor.getId(), contributor.getUsername(), "hash",
                 contributor.getDisplayName(), true, false, Set.of("TEST_COORDINATOR"),
                 Set.of("test_case:read", "test_case:draft_edit", "test_case:submit_review"));
 
         TestCaseDetailResponse detail = queryService.detail(masterId, contributorPrincipal);
-        assertThat(detail.allowedActions().submitReview()).isTrue();
+        assertThat(detail.allowedActions().editDraft()).isTrue();
+        assertThat(detail.allowedActions().submitReview()).isFalse();
 
-        lifecycleService.submitReview(masterId, new LifecycleActionRequest("contributor submit"), contributorPrincipal);
-        assertThat(versionStatus(masterId, created.visibleVersion().id())).isEqualTo(TestCaseVersionStatus.REVIEW);
+        assertThatThrownBy(() -> lifecycleService.submitReview(
+                masterId, new LifecycleActionRequest("contributor submit"), contributorPrincipal))
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.TEST_CASE_LIFECYCLE_FORBIDDEN);
+        assertThat(versionStatus(masterId, created.visibleVersion().id())).isEqualTo(TestCaseVersionStatus.DRAFT);
     }
 
     // -------------------------------------------------------------------------
@@ -539,14 +542,20 @@ class TestCaseLifecycleIT extends AbstractIntegrationTest {
         assertThat(detail.visibleVersion().id()).isEqualTo(v11);
         assertThat(detail.visibleVersion().isCurrentVersion()).isTrue();
 
-        // Now deprecate the current version. The historical v1.0 must surface (not flagged current),
-        // and no version may be reported as current.
+        // Now deprecate the current version. The newest DEPRECATED v1.1 is the
+        // primary/default version; historical v1.0 remains history only, and no
+        // version may be reported as current.
         lifecycleService.deprecate(masterId, v11, new LifecycleActionRequest("obsolete"), adminPrincipal);
         TestCaseDetailResponse afterDeprecate = queryService.detail(masterId, viewer);
-        assertThat(afterDeprecate.visibleVersion().status()).isEqualTo("PUBLISHED");
-        assertThat(afterDeprecate.visibleVersion().id()).isEqualTo(v10);
+        assertThat(afterDeprecate.visibleVersion().status()).isEqualTo("DEPRECATED");
+        assertThat(afterDeprecate.visibleVersion().id()).isEqualTo(v11);
         assertThat(afterDeprecate.visibleVersion().isCurrentVersion()).isFalse();
         assertThat(afterDeprecate.currentVersion()).isNull();
+        assertThat(afterDeprecate.versions()).extracting("id").contains(v10, v11);
+
+        var listed = queryService.list(null, null, null, null, null, null, 0, 20, "updatedAt,desc", viewer);
+        assertThat(listed.content()).filteredOn(summary -> summary.id().equals(masterId))
+                .singleElement().extracting("status").isEqualTo("DEPRECATED");
     }
 
     @Test
@@ -729,6 +738,24 @@ class TestCaseLifecycleIT extends AbstractIntegrationTest {
                 testerPrincipal);
         assertThat(updated.visibleVersion().caseName()).isEqualTo("Edited By Tester");
         assertThat(updated.allowedActions().editDraft()).isTrue();
+        assertThat(updated.allowedActions().submitReview()).isFalse();
+    }
+
+    @Test
+    void testerContributorCannotSubmitAssignedDraft() {
+        TestCaseDetailResponse created = createDraft("H4-001", "Contributor Submit Denied");
+        UUID masterId = created.id();
+
+        UserEntity tester = saveTester("contrib_submit");
+        lifecycleService.addContributor(masterId,
+                new com.company.casehub.testcase.dto.AddContributorRequest(tester.getId()), coordinatorPrincipal);
+        UserPrincipal testerPrincipal = new UserPrincipal(tester.getId(), tester.getUsername(), "hash",
+                tester.getDisplayName(), true, false, Set.of("TESTER"),
+                Set.of("test_case:read", "test_case:submit_review"));
+
+        assertThatThrownBy(() -> lifecycleService.submitReview(masterId,
+                new LifecycleActionRequest("tester submit"), testerPrincipal))
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.TEST_CASE_LIFECYCLE_FORBIDDEN);
     }
 
     @Test
@@ -812,7 +839,7 @@ class TestCaseLifecycleIT extends AbstractIntegrationTest {
     // -------------------------------------------------------------------------
 
     @Test
-    void unrelatedCoordinatorCannotCreateRevisionWithOmittedSource() {
+    void unrelatedCoordinatorCanCreateRevisionWithOmittedCurrentPublishedSource() {
         TestCaseDetailResponse created = createDraft("H5-001", "Omitted Source");
         UUID masterId = created.id();
         UUID versionId = created.visibleVersion().id();
@@ -820,11 +847,12 @@ class TestCaseLifecycleIT extends AbstractIntegrationTest {
         lifecycleService.publish(masterId, versionId, new LifecycleActionRequest("publish"), adminPrincipal);
 
         UserPrincipal unrelated = unrelatedCoordinator();
-        // No explicit sourceVersionId — the default fallback must be denied for an
-        // unrelated Coordinator (HIGH-05: omitted sourceVersionId -> DENY).
-        assertThatThrownBy(() -> lifecycleService.createRevision(
-                masterId, new CreateRevisionRequest(null, "unrelated branch"), unrelated))
-                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.TEST_CASE_REVISION_SOURCE_INVALID);
+        // No explicit sourceVersionId — current PUBLISHED is public, so omitted and
+        // explicit current-PUBLISHED forms use the same source semantics.
+        TestCaseDetailResponse revised = lifecycleService.createRevision(
+                masterId, new CreateRevisionRequest(null, "unrelated branch"), unrelated);
+        assertThat(revised.draftVersion()).isNotNull();
+        assertThat(revised.draftVersion().basedOnVersionId()).isEqualTo(versionId);
     }
 
     @Test

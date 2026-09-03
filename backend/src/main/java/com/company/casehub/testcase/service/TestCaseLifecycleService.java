@@ -106,9 +106,9 @@ public class TestCaseLifecycleService {
                 .orElseThrow(() -> new ConflictException(ErrorCode.TEST_CASE_DRAFT_REQUIRED,
                         "No Draft exists to submit for: " + masterId));
         ensureEditableRevision(draft);
-        if (!accessPolicy.canEditOrSubmit(draft, principal)) {
+        if (!accessPolicy.canSubmitReview(draft, principal)) {
             throw new ForbiddenOperationException(ErrorCode.TEST_CASE_LIFECYCLE_FORBIDDEN,
-                    "Only the Draft owner, a contributor or an administrator may submit this draft.");
+                    "Only an authorised Draft owner or administrator may submit this draft.");
         }
         requireCompleteDraft(draft);
         draft.setStatus(TestCaseVersionStatus.REVIEW);
@@ -387,29 +387,29 @@ public class TestCaseLifecycleService {
                 return source;
             }
             // HIGH-03: a rejected revision (REVIEW + revision_closed) may be revised into a new Draft.
-            if (source.getStatus() == TestCaseVersionStatus.REVIEW && source.isRevisionClosed()) {
+            if (accessPolicy.canUseRejectedRevisionSource(source, principal)) {
                 return source;
             }
             throw new BusinessRuleException(ErrorCode.TEST_CASE_REVISION_SOURCE_INVALID,
                     "A revision can only be created from a PUBLISHED version or a rejected (closed) REVIEW version.");
         }
-        // Default source: the current PUBLISHED version, otherwise the latest rejected (closed)
-        // REVIEW version. HIGH-05: an unrelated principal (not owner/contributor/admin) must not be
-        // able to branch a revision simply by omitting the source — the fallback only applies when
-        // the principal has a direct edit/submit relationship with the chosen source. An unrelated
-        // Coordinator with draft_create is therefore denied (omitted sourceVersionId -> DENY), and
-        // can never reach a rejected REVIEW version it is not allowed to see.
-        TestCaseVersionEntity defaultSource = master.getVersions().stream()
+        // Default source: current PUBLISHED remains public and must not gain a
+        // private resource restriction merely because sourceVersionId was omitted.
+        TestCaseVersionEntity currentPublished = master.getVersions().stream()
                 .filter(v -> v.isCurrentVersion() && v.getStatus() == TestCaseVersionStatus.PUBLISHED)
-                .findFirst()
-                .orElseGet(() -> master.getVersions().stream()
-                        .filter(v -> v.getStatus() == TestCaseVersionStatus.REVIEW && v.isRevisionClosed())
-                        .max(Comparator.comparingInt(TestCaseVersionEntity::getVersionMajor)
-                                .thenComparingInt(TestCaseVersionEntity::getVersionMinor))
-                        .orElse(null));
-        if (defaultSource == null || !accessPolicy.canEditOrSubmit(defaultSource, principal)) {
+                .findFirst().orElse(null);
+        if (currentPublished != null) {
+            return currentPublished;
+        }
+
+        TestCaseVersionEntity defaultSource = master.getVersions().stream()
+                .filter(version -> accessPolicy.canUseRejectedRevisionSource(version, principal))
+                .max(Comparator.comparingInt(TestCaseVersionEntity::getVersionMajor)
+                        .thenComparingInt(TestCaseVersionEntity::getVersionMinor))
+                .orElse(null);
+        if (defaultSource == null) {
             throw new BusinessRuleException(ErrorCode.TEST_CASE_REVISION_SOURCE_INVALID,
-                    "No visible PUBLISHED or rejected version to revise, or the principal is not authorised to revise it.");
+                    "No current PUBLISHED or authorised rejected version is available to revise.");
         }
         return defaultSource;
     }

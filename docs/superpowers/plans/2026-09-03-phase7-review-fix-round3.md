@@ -71,11 +71,11 @@ Expected: FAIL because the service still calls `canEditOrSubmit`.
 
 - [ ] **Step 7: Implement separate policy methods and helpers.**
 
-Implement `canEditDraft(version, principal)` as `ADMIN || owner || contributor`, and `canSubmitReview(version, principal)` as `has test_case:submit_review && (ADMIN || owner)`. Keep status/open checks at callers. Implement `canSubmitReviewById` only if needed by the controller expression; the preferred controller expression is the permission-only gate because the service is the resource gate.
+Implement `canEditDraft(version, principal)` as `ADMIN || owner || contributor`, and `canSubmitReview(version, principal)` as `has test_case:submit_review && (ADMIN || owner)`. Keep status/open checks at callers. Implement `canSubmitReviewById` as the controller resource helper, independently from `canEditDraftById`, and keep the permission check in the controller expression.
 
 - [ ] **Step 8: Wire controller, service, and AllowedActions to the independent decisions.**
 
-Use `@PreAuthorize("hasAuthority('test_case:submit_review')")` for Submit Review, call `canSubmitReview` in the service, and compute `editDraft`/`submitReview` independently. Keep update-Draft on `canEditDraftById` and route it to `canEditDraft`.
+Use `@PreAuthorize("hasAuthority('test_case:submit_review') and @testCaseAccessPolicy.canSubmitReviewById(#masterId, principal)")` for Submit Review, call `canSubmitReview` in the service, and compute `editDraft`/`submitReview` independently. Keep update-Draft on `canEditDraftById` and route it to `canEditDraft`.
 
 - [ ] **Step 9: Run the focused HIGH-04 tests and confirm green.**
 

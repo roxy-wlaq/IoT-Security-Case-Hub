@@ -134,7 +134,7 @@ public class TestCaseDraftService {
         if (draft.isRevisionClosed() || draft.getStatus() != TestCaseVersionStatus.DRAFT) {
             throw new ConflictException(ErrorCode.TEST_CASE_VERSION_IMMUTABLE, "Only open Draft versions can be edited.");
         }
-        if (!accessPolicy.canEditOrSubmit(draft, principal)) {
+        if (!accessPolicy.canEditDraft(draft, principal)) {
             throw new ForbiddenOperationException(ErrorCode.TEST_CASE_DRAFT_EDIT_FORBIDDEN,
                     "Only the Draft owner, a contributor or an administrator may edit this test case.");
         }
