@@ -82,14 +82,21 @@ export const NAVIGATION_ITEMS: readonly NavigationItem[] = [
     label: '项目管理',
     permission: 'project:read',
     description: '项目、能力矩阵、生成与测试计划。',
-    plannedPhase: 'Phase 9',
+    plannedPhase: 'Phase 9-14',
   },
   {
     path: '/generation-rules',
     label: '生成规则',
     permission: 'generation_rule:read',
     description: '生成规则条件组与输出配置。',
-    plannedPhase: 'Phase 11',
+    plannedPhase: 'Phase 11-12',
+  },
+  {
+    path: '/my-tests',
+    label: '我的测试',
+    permission: 'project_test_case:read',
+    description: 'My Projects 与 My Cases。',
+    plannedPhase: 'Phase 14',
   },
   {
     path: '/audit-logs',

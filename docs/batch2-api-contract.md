@@ -35,14 +35,14 @@ Standard/Task Type uses `PRESENT`/`ANY` according to the request DTO contract.
 
 ## Generation
 
-`POST /projects/{projectId}/generation-runs` creates a run with `mode`
+`POST /projects/{projectId}/generation/runs` creates a run with `mode`
 (`FULL` or `PROGRESSIVE_INITIAL`) and a trigger type. `GET
-/projects/{projectId}/generation-runs/{runId}/recommendations` returns one
+/projects/{projectId}/generation/runs/{runId}/recommendations` returns one
 recommendation per Master Test Case and all matched rule names as
 `recommendedBecause`. `POST .../recommendations/{recommendationId}/add` adds or
 reuses the Project Test Case and binds the current valid Published Version.
-`POST .../recommendations/{masterId}/ignore` persists a Project-local Ignore;
-`DELETE .../recommendations/{masterId}/ignore` restores it.
+`POST .../recommendations/{recommendationId}/ignore` persists a Project-local
+Ignore. Sending `{ "ignored": false }` removes the current Project-local Ignore.
 
 `PROGRESSIVE_INITIAL` recommends `ENTRY` cases only. Generation never executes
 Decision Points, NEXT_CASE, NEXT_CASES, triggers, or Progressive Runtime.

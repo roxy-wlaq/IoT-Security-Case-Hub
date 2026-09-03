@@ -156,7 +156,7 @@ class MigrationIT extends AbstractIntegrationTest {
         assertThat(projectMasterIndex).isEqualTo(1);
 
         assertThat(jdbcTemplate.queryForObject(
-                "SELECT count(*) FROM casehub.flyway_schema_history WHERE version = '014'", Integer.class))
+                "SELECT count(*) FROM casehub.flyway_schema_history WHERE version = '015'", Integer.class))
                 .isEqualTo(1);
     }
 }

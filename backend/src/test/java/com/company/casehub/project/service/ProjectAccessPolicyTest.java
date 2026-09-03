@@ -7,6 +7,7 @@ import com.company.casehub.auth.security.UserPrincipal;
 import com.company.casehub.project.entity.ProjectCoordinatorEntity;
 import com.company.casehub.project.entity.ProjectEntity;
 import com.company.casehub.project.repository.ProjectCoordinatorRepository;
+import com.company.casehub.execution.repository.ProjectTestCaseAssigneeRepository;
 import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -20,15 +21,18 @@ class ProjectAccessPolicyTest {
     @Mock
     private ProjectCoordinatorRepository coordinatorRepository;
 
+    @Mock
+    private ProjectTestCaseAssigneeRepository assigneeRepository;
+
     @Test
     void adminCanManageAnyProject() {
-        ProjectAccessPolicy policy = new ProjectAccessPolicy(coordinatorRepository);
+        ProjectAccessPolicy policy = new ProjectAccessPolicy(coordinatorRepository, assigneeRepository);
         assertThat(policy.canManage(UUID.randomUUID(), principal("ADMIN"))).isTrue();
     }
 
     @Test
     void coordinatorCanManageOnlyAssignedProject() {
-        ProjectAccessPolicy policy = new ProjectAccessPolicy(coordinatorRepository);
+        ProjectAccessPolicy policy = new ProjectAccessPolicy(coordinatorRepository, assigneeRepository);
         UUID projectId = UUID.randomUUID();
         UUID userId = UUID.randomUUID();
         when(coordinatorRepository.existsByProjectIdAndUserId(projectId, userId)).thenReturn(true);

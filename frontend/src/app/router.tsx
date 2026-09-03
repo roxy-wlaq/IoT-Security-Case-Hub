@@ -16,6 +16,9 @@ import { CapabilityAdminPage } from '@/features/capability/pages/CapabilityAdmin
 import { TestCaseDraftPage } from '@/features/testcase/pages/TestCaseDraftPage';
 import { TestCaseLibraryPage } from '@/features/testcase/pages/TestCaseLibraryPage';
 import { TestCaseDetailPage } from '@/features/testcase/pages/TestCaseDetailPage';
+import { ProjectPage } from '@/features/project/pages/ProjectPage';
+import { GenerationRulePage } from '@/features/generation/pages/GenerationRulePage';
+import { MyTestsPage } from '@/features/project/pages/MyTestsPage';
 
 /**
  * 已实现模块的页面映射（Phase 4 基础字典 / Phase 5 能力库）。
@@ -28,6 +31,9 @@ const pageComponents: Record<string, ComponentType> = {
   '/admin/categories': CategoryAdminPage,
   '/admin/tags': TagAdminPage,
   '/tools': ToolPage,
+  '/projects': ProjectPage,
+  '/generation-rules': GenerationRulePage,
+  '/my-tests': MyTestsPage,
 };
 
 const protectedRoutes = [

@@ -47,7 +47,7 @@ public class ProjectCapabilityService {
 
     @Transactional(readOnly = true)
     public List<ProjectCapabilityResponse> list(UUID projectId, UserPrincipal principal) {
-        accessPolicy.requireManage(projectId, principal);
+        accessPolicy.requireView(projectId, principal);
         List<ProjectCapabilityEntity> rows = repository.findByProjectId(projectId);
         return capabilityRepository.findAllByOrderBySortOrderAscNameAsc().stream()
                 .map(capability -> rows.stream().filter(row -> row.getCapability().getId().equals(capability.getId()))

@@ -7,7 +7,7 @@
 
 ## Current Phase
 
-**Phase 0–7 已完成，Phase 8 开发中**，代码位于 `dev/v1-implementation` 分支。
+**Phase 0–8 已完成，Batch 2（Phase 9–14）开发完成待 QA**，代码位于 `dev/v1-implementation` 分支。
 
 - 实现状态：`Implementation Complete / Unit + Integration + Frontend Verification`
 - **Round 1（2026-09-02 早）：** 修复 **8 项** Phase 0–3 Code Review 发现（HIGH-01/02/03、MEDIUM-01/02/03/04、LOW-01），每 HIGH 增加 Regression Test，并补齐前端基础测试（MEDIUM-01）。（注：此前内部记录曾误写为"9 项"，实际表格为 8 项，本轮已校正。）
@@ -17,7 +17,8 @@
 - 技术栈保持冻结（Java 21 / Spring Boot 3 / Spring Security / Server-side Session / CSRF / PostgreSQL 16 / Flyway / React+TS / TanStack Query / Ant Design / Nginx / Docker Compose）。未引入 JWT，未关闭 CSRF，未重新设计架构。
 - **Phase 6（2026-09-02）：** 完成 Master Test Case 基础：V006 数据模型、Draft 创建/编辑、可见性查询、分页搜索、版本历史、前端测试库与 Draft 编辑器；严格未实现 Phase 7 生命周期及后续 DAG/Project/Generation/Storage。
 - **Phase 7（2026-09-03）：** 完成 Test Case Lifecycle：V008 迁移（`test_case_review_records` / `revision_contributors`）；DRAFT→REVIEW→PUBLISHED 状态机、Return→DRAFT、Reject 保持 REVIEW + `revision_closed=true`（**无 REJECTED 状态**）、Deprecate→DEPRECATED、Create Revision Draft；Published Immutable（Service 层硬断言，非仅 DB CHECK）、单一当前发布版本（部分唯一索引 `uq_test_case_current_version`）、服务端控制版本号（major=源 major，minor=同 major MAX+1）、资源级 RBAC（owner/contributor/admin）+ 权限码双闸门、AllowedActions 9 字段、latestReviewAction；前端详情页操作栏 / 评审历史 Timeline / 贡献者管理 / 已驳回标签。后端 surefire **176**、failsafe **58** 全绿；前端 **51** 测试全绿。
-- **Phase 8（2026-09-04）：** 已实现 DecisionPoint / Transition / TransitionTarget 的 V009 持久化、Draft 资源级编辑与 Published Immutable、Transition target cardinality、`DagValidationService` 环检测、Submit/Publish 边界校验、Master Logic Graph API 与 React Flow 编辑/只读界面；Phase 9+ Runtime、ProjectDecisionSelection、BranchOutcome、Generation 仍未实现。Phase 8 验证结果以本轮 QA handoff 为准。
+- **Phase 8（2026-09-04）：** 已实现 DecisionPoint / Transition / TransitionTarget 的 V009 持久化、Draft 资源级编辑与 Published Immutable、Transition target cardinality、`DagValidationService` 环检测、Submit/Publish 边界校验、Master Logic Graph API 与 React Flow 编辑/只读界面。
+- **Batch 2 / Phase 9–14（2026-09-04）：** 已实现 Project Core、Project Capability effective-value engine、Generation Rule 条件组与输出、FULL/PROGRESSIVE_INITIAL Generation recommendations、Recommended Because、Project-local Ignore、版本绑定 Project Test Plan、TESTER assignee、Remove/Restore、My Projects/My Cases 与 firstViewedAt/NEW；新增 Flyway V010–V015。Phase 15+ execution/evidence/DAG runtime 仍未实现，MEDIUM-B 继续延期。
 
 ---
 

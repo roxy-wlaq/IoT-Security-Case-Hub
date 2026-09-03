@@ -20,6 +20,7 @@ import com.company.casehub.standard.entity.StandardTaskTypeEntity;
 import com.company.casehub.standard.repository.StandardTaskTypeRepository;
 import com.company.casehub.user.entity.UserEntity;
 import com.company.casehub.user.repository.UserRepository;
+import com.company.casehub.user.repository.UserRoleRepository;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -38,19 +39,22 @@ public class ProjectService {
     private final UserRepository userRepository;
     private final StandardTaskTypeRepository standardTaskTypeRepository;
     private final ProjectAccessPolicy accessPolicy;
+    private final UserRoleRepository userRoleRepository;
 
     public ProjectService(ProjectRepository projectRepository,
                            ProjectCoordinatorRepository coordinatorRepository,
                            ProjectStandardRepository standardRepository,
                            UserRepository userRepository,
                            StandardTaskTypeRepository standardTaskTypeRepository,
-                           ProjectAccessPolicy accessPolicy) {
+                           ProjectAccessPolicy accessPolicy,
+                           UserRoleRepository userRoleRepository) {
         this.projectRepository = projectRepository;
         this.coordinatorRepository = coordinatorRepository;
         this.standardRepository = standardRepository;
         this.userRepository = userRepository;
         this.standardTaskTypeRepository = standardTaskTypeRepository;
         this.accessPolicy = accessPolicy;
+        this.userRoleRepository = userRoleRepository;
     }
 
     @Transactional
@@ -61,6 +65,7 @@ public class ProjectService {
         UUID coordinatorId = request.primaryCoordinatorId() == null ? principal.getId() : request.primaryCoordinatorId();
         UserEntity coordinator = userRepository.findById(coordinatorId)
                 .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.RESOURCE_NOT_FOUND, "Coordinator not found"));
+        requireCoordinator(coordinatorId);
 
         ProjectEntity project = new ProjectEntity();
         project.setProjectNumber(generateProjectNumber());
@@ -85,7 +90,7 @@ public class ProjectService {
 
     @Transactional(readOnly = true)
     public ProjectResponse get(UUID projectId, UserPrincipal principal) {
-        accessPolicy.requireManage(projectId, principal);
+        accessPolicy.requireView(projectId, principal);
         return toResponse(requireProject(projectId));
     }
 
@@ -104,6 +109,7 @@ public class ProjectService {
         if (request.primaryCoordinatorId() != null) {
             UserEntity coordinator = userRepository.findById(request.primaryCoordinatorId())
                     .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.RESOURCE_NOT_FOUND, "Coordinator not found"));
+            requireCoordinator(coordinator.getId());
             replacePrimaryCoordinator(project, coordinator);
         }
         return toResponse(projectRepository.save(project));
@@ -154,6 +160,15 @@ public class ProjectService {
         link.setPrimary(true);
         project.getCoordinators().add(link);
         coordinatorRepository.save(link);
+    }
+
+    private void requireCoordinator(UUID userId) {
+        if (userRoleRepository.findByUserId(userId).stream().noneMatch(userRole ->
+                "TEST_COORDINATOR".equals(userRole.getRole().getCode())
+                        || "ADMIN".equals(userRole.getRole().getCode()))) {
+            throw new ConflictException(ErrorCode.PROJECT_PRIMARY_COORDINATOR_CONFLICT,
+                    "Primary Coordinator must have the TEST_COORDINATOR role");
+        }
     }
 
     private String generateProjectNumber() {
