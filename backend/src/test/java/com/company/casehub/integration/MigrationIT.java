@@ -125,9 +125,38 @@ class MigrationIT extends AbstractIntegrationTest {
         assertThat(phase8Tables).isEqualTo(3);
         Integer runtimeTables = jdbcTemplate.queryForObject(
                 "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'casehub' "
-                        + "AND table_name IN ('project_decision_selections','branch_outcomes','project_test_cases')", Integer.class);
+                        + "AND table_name IN ('project_decision_selections','branch_outcomes',"
+                        + "'project_test_case_triggers','evidence','notes')", Integer.class);
         assertThat(runtimeTables).isZero();
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT count(*) FROM casehub.flyway_schema_history WHERE version = '009'", Integer.class)).isEqualTo(1);
+    }
+
+    @Test
+    void batch2MigrationsCreatePlanningTablesAndConstraints() {
+        List<String> tables = List.of(
+                "projects", "project_standards", "project_coordinators", "project_capabilities",
+                "generation_rules", "generation_condition_groups", "generation_conditions",
+                "generation_rule_outputs", "generation_runs", "generation_recommendations",
+                "generation_recommendation_rules", "project_test_case_preferences",
+                "project_test_cases", "project_test_case_sources", "project_test_case_assignees");
+        Integer tableCount = jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'casehub' "
+                        + "AND table_name = ANY (?)", Integer.class, (Object) tables.toArray(new String[0]));
+        assertThat(tableCount).isEqualTo(tables.size());
+
+        Integer primaryIndex = jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM pg_indexes WHERE schemaname = 'casehub' "
+                        + "AND indexname = 'uq_project_primary_coordinator'", Integer.class);
+        assertThat(primaryIndex).isEqualTo(1);
+
+        Integer projectMasterIndex = jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM pg_indexes WHERE schemaname = 'casehub' "
+                        + "AND indexname = 'uq_project_master_test_case'", Integer.class);
+        assertThat(projectMasterIndex).isEqualTo(1);
+
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM casehub.flyway_schema_history WHERE version = '014'", Integer.class))
+                .isEqualTo(1);
     }
 }

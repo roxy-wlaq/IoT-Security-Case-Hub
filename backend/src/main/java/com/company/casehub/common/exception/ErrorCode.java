@@ -70,6 +70,21 @@ public enum ErrorCode {
     TEST_CASE_TRANSITION_TARGET_INVALID(HttpStatus.BAD_REQUEST, "One or more transition targets are invalid."),
     TEST_CASE_DAG_CYCLE_DETECTED(HttpStatus.UNPROCESSABLE_ENTITY, "The master test case logic graph must not contain a cycle."),
 
+    // ---- Project Planning and Generation (Phase 9-14) ----
+    PROJECT_NOT_FOUND(HttpStatus.NOT_FOUND, "Project not found."),
+    PROJECT_ACCESS_FORBIDDEN(HttpStatus.FORBIDDEN, "You do not have access to this Project."),
+    PROJECT_PRIMARY_COORDINATOR_CONFLICT(HttpStatus.CONFLICT, "A Project can have only one primary Coordinator."),
+    PROJECT_STANDARD_INVALID(HttpStatus.BAD_REQUEST, "One or more Project standards are invalid."),
+    PROJECT_CAPABILITY_INVALID(HttpStatus.BAD_REQUEST, "The Project capability value or source is invalid."),
+    GENERATION_RULE_INVALID(HttpStatus.BAD_REQUEST, "The Generation Rule is invalid."),
+    GENERATION_RULE_ACCESS_FORBIDDEN(HttpStatus.FORBIDDEN, "You cannot manage this Generation Rule."),
+    GENERATION_RECOMMENDATION_NOT_FOUND(HttpStatus.NOT_FOUND, "Generation recommendation not found."),
+    PROJECT_TEST_CASE_NOT_FOUND(HttpStatus.NOT_FOUND, "Project Test Case not found."),
+    PROJECT_TEST_CASE_DUPLICATE(HttpStatus.CONFLICT, "The Project already contains this Master Test Case."),
+    PROJECT_TEST_CASE_VERSION_INVALID(HttpStatus.UNPROCESSABLE_ENTITY, "No valid current Published Test Case Version exists."),
+    PROJECT_TEST_CASE_ASSIGNEE_INVALID(HttpStatus.BAD_REQUEST, "A Project Test Case assignee must be a TESTER."),
+    PROJECT_TEST_CASE_ACCESS_FORBIDDEN(HttpStatus.FORBIDDEN, "You cannot modify this Project Test Case."),
+
     // ---- Generic (reused by later phases) ----
     VALIDATION_FAILED(HttpStatus.BAD_REQUEST, "Request validation failed."),
     RESOURCE_NOT_FOUND(HttpStatus.NOT_FOUND, "The requested resource was not found."),
