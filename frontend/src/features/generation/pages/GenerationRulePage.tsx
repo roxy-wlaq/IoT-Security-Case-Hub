@@ -1,11 +1,14 @@
-import { Alert, Card, Table, Tag, Typography } from 'antd';
+import { Alert, Button, Card, Form, Input, Select, Space, Table, Tag, Typography } from 'antd';
 import { useEffect, useState } from 'react';
-import { listGenerationRules } from '@/features/project/api/projectApi';
+import { createGenerationRule, listGenerationRules } from '@/features/project/api/projectApi';
 import type { GenerationRule } from '@/shared/types/project';
+import { PermissionGuard } from '@/shared/components/PermissionGuard';
 
 export function GenerationRulePage() {
-  const [rules, setRules] = useState<GenerationRule[]>([]); const [error, setError] = useState(false);
-  useEffect(() => { void listGenerationRules().then(setRules).catch(() => setError(true)); }, []);
-  return <Card><Typography.Title level={3}>生成规则</Typography.Title>{error ? <Alert type="error" message="生成规则加载失败" /> : null}<Table rowKey="id" dataSource={rules} columns={[{ title: 'Rule Code', dataIndex: 'ruleCode' }, { title: '名称', dataIndex: 'name' }, { title: '模式', dataIndex: 'mode' }, { title: '状态', dataIndex: 'status', render: (v: string) => <Tag color={v === 'ENABLED' ? 'green' : 'default'}>{v}</Tag> }, { title: '输出 Master 数', render: (_: unknown, rule: GenerationRule) => rule.outputMasterTestCaseIds.length }]} /></Card>;
+  const [rules, setRules] = useState<GenerationRule[]>([]); const [error, setError] = useState(false); const [form] = Form.useForm();
+  const refresh = () => { void listGenerationRules().then(setRules).catch(() => setError(true)); };
+  useEffect(refresh, []);
+  const save = (values: { ruleCode: string; name: string; mode: string; status: string; standardTaskTypeId?: string; outputMasterTestCaseIds: string }) => void createGenerationRule({ ruleCode: values.ruleCode, name: values.name, mode: values.mode, status: values.status, groups: [{ parentGroupIndex: null, logicOperator: 'AND', sortOrder: 0, conditions: values.standardTaskTypeId ? [{ targetType: 'STANDARD_TASK_TYPE', standardTaskTypeId: values.standardTaskTypeId, operator: 'ANY', sortOrder: 0 }] : [] }], outputMasterTestCaseIds: values.outputMasterTestCaseIds.split(',').map((id) => id.trim()).filter(Boolean) }).then(() => { form.resetFields(); refresh(); }).catch(() => setError(true));
+  return <Card><Space style={{ width: '100%', justifyContent: 'space-between' }}><Typography.Title level={3}>生成规则</Typography.Title><PermissionGuard permission="generation_rule:manage"><Typography.Text type="secondary">Admin 编辑</Typography.Text></PermissionGuard></Space>{error ? <Alert type="error" message="生成规则加载或保存失败" /> : null}<PermissionGuard permission="generation_rule:manage"><Form form={form} layout="inline" onFinish={save} style={{ marginBottom: 20 }}><Form.Item name="ruleCode" rules={[{ required: true }]}><Input placeholder="Rule Code" /></Form.Item><Form.Item name="name" rules={[{ required: true }]}><Input placeholder="名称" /></Form.Item><Form.Item name="mode" initialValue="FULL"><Select options={['FULL', 'PROGRESSIVE_INITIAL', 'BOTH'].map((v) => ({ value: v, label: v }))} /></Form.Item><Form.Item name="status" initialValue="ENABLED"><Select options={['ENABLED', 'DISABLED'].map((v) => ({ value: v, label: v }))} /></Form.Item><Form.Item name="standardTaskTypeId"><Input placeholder="标准 UUID（可选）" /></Form.Item><Form.Item name="outputMasterTestCaseIds" rules={[{ required: true }]}><Input placeholder="Master UUID，逗号分隔" /></Form.Item><Button type="primary" htmlType="submit">创建规则</Button></Form></PermissionGuard><Table rowKey="id" dataSource={rules} columns={[{ title: 'Rule Code', dataIndex: 'ruleCode' }, { title: '名称', dataIndex: 'name' }, { title: '模式', dataIndex: 'mode' }, { title: '状态', dataIndex: 'status', render: (v: string) => <Tag color={v === 'ENABLED' ? 'green' : 'default'}>{v}</Tag> }, { title: '输出 Master 数', render: (_: unknown, rule: GenerationRule) => rule.outputMasterTestCaseIds.length }]} /></Card>;
 }
 export default GenerationRulePage;
