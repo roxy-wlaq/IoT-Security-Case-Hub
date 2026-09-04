@@ -114,6 +114,8 @@ ALTER TABLE casehub.decision_points
         OR (test_case_version_id IS NULL AND custom_test_case_id IS NOT NULL)
     );
 CREATE INDEX IF NOT EXISTS ix_decision_points_custom_case ON casehub.decision_points(custom_test_case_id, display_order);
+ALTER TABLE casehub.decision_points
+    ADD CONSTRAINT uq_decision_points_custom_order UNIQUE (custom_test_case_id, display_order);
 
 ALTER TABLE casehub.transition_targets
     ALTER COLUMN target_master_test_case_id DROP NOT NULL,
@@ -126,6 +128,8 @@ ALTER TABLE casehub.transition_targets
         (target_master_test_case_id IS NOT NULL AND target_custom_test_case_id IS NULL)
         OR (target_master_test_case_id IS NULL AND target_custom_test_case_id IS NOT NULL)
     );
+ALTER TABLE casehub.transition_targets
+    ADD CONSTRAINT uq_transition_targets_custom UNIQUE (transition_id, target_custom_test_case_id);
 
 ALTER TABLE casehub.branch_outcomes
     ADD COLUMN target_custom_test_case_id UUID;

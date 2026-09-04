@@ -73,7 +73,7 @@ public class TestCaseChangeRequestService {
 
     @Transactional
     public TestCaseChangeRequestResponse review(UUID requestId, boolean approve, ReviewRequestPayload payload, UserPrincipal principal) {
-        TestCaseChangeRequestEntity request = requestRepository.findById(requestId).orElseThrow(() -> new ResourceNotFoundException(ErrorCode.CHANGE_REQUEST_NOT_FOUND, "Change Request not found"));
+        TestCaseChangeRequestEntity request = requestRepository.findByIdForUpdate(requestId).orElseThrow(() -> new ResourceNotFoundException(ErrorCode.CHANGE_REQUEST_NOT_FOUND, "Change Request not found"));
         if (!(principal.getRoles().contains("TEST_COORDINATOR") || principal.getRoles().contains("ADMIN"))) throw new ForbiddenOperationException(ErrorCode.CHANGE_REQUEST_REVIEW_FORBIDDEN, "Only a Coordinator or Admin may review");
         if (request.getStatus() != TestCaseChangeRequestStatus.PENDING) throw new ConflictException(ErrorCode.CHANGE_REQUEST_STATE_INVALID, "Request is already reviewed");
         UserEntity reviewer = currentUser(principal); request.setReviewedBy(reviewer); request.setReviewComment(payload == null ? null : trim(payload.comment()));

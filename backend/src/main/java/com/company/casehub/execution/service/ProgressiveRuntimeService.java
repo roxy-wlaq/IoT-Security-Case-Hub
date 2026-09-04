@@ -30,6 +30,7 @@ import com.company.casehub.testcase.entity.TransitionTargetEntity;
 import com.company.casehub.testcase.entity.TransitionType;
 import com.company.casehub.testcase.repository.DecisionPointRepository;
 import com.company.casehub.testcase.repository.TestCaseVersionRepository;
+import com.company.casehub.testcase.service.DagValidationService;
 import com.company.casehub.user.entity.UserEntity;
 import com.company.casehub.user.repository.UserRepository;
 import java.time.Instant;
@@ -53,6 +54,7 @@ public class ProgressiveRuntimeService {
     private final TestCaseVersionRepository versionRepository;
     private final UserRepository userRepository;
     private final ProjectCustomTestCaseRepository customCaseRepository;
+    private final DagValidationService dagValidationService;
 
     public ProgressiveRuntimeService(ProjectTestCaseRepository testCaseRepository,
                                      ProjectTestCaseSourceRepository sourceRepository,
@@ -63,7 +65,8 @@ public class ProgressiveRuntimeService {
                                      DecisionPointRepository decisionPointRepository,
                                      TestCaseVersionRepository versionRepository,
                                      UserRepository userRepository,
-                                     ProjectCustomTestCaseRepository customCaseRepository) {
+                                     ProjectCustomTestCaseRepository customCaseRepository,
+                                     DagValidationService dagValidationService) {
         this.testCaseRepository = testCaseRepository;
         this.sourceRepository = sourceRepository;
         this.triggerRepository = triggerRepository;
@@ -74,6 +77,7 @@ public class ProgressiveRuntimeService {
         this.versionRepository = versionRepository;
         this.userRepository = userRepository;
         this.customCaseRepository = customCaseRepository;
+        this.dagValidationService = dagValidationService;
     }
 
     @Transactional
@@ -98,6 +102,9 @@ public class ProgressiveRuntimeService {
             selection.setProjectTestCase(source); selection.setDecisionPoint(point); selectionRepository.save(selection);
             TransitionEntity transition = point.getTransition();
             if (transition == null) continue;
+            dagValidationService.validateTransitionTargets(transition.getType(), transition.getTargets().stream().map(target ->
+                    target.getTargetMasterTestCase() != null ? target.getTargetMasterTestCase().getId() :
+                            target.getTargetCustomTestCase() == null ? null : target.getTargetCustomTestCase().getId()).toList());
             if (transition.getType() == TransitionType.NEXT_CASE && transition.getTargets().size() != 1) {
                 throw new BusinessRuleException(ErrorCode.EXECUTION_SELECTION_INVALID, "NEXT_CASE must have exactly one target");
             }

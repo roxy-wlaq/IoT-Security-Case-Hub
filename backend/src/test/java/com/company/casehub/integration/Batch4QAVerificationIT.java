@@ -15,6 +15,8 @@ import com.company.casehub.change.entity.CapabilityUpdateRequestStatus;
 import com.company.casehub.change.service.CapabilityUpdateRequestService;
 import com.company.casehub.change.service.TestCaseChangeRequestService;
 import com.company.casehub.common.exception.ConflictException;
+import com.company.casehub.common.exception.BusinessRuleException;
+import com.company.casehub.common.exception.ValidationException;
 import com.company.casehub.common.exception.ErrorCode;
 import com.company.casehub.common.exception.ForbiddenOperationException;
 import com.company.casehub.customcase.dto.CustomDecisionPointRequest;
@@ -31,6 +33,7 @@ import com.company.casehub.execution.repository.ProjectDecisionSelectionReposito
 import com.company.casehub.execution.repository.ProjectTestCaseAssigneeRepository;
 import com.company.casehub.execution.repository.ProjectTestCaseRepository;
 import com.company.casehub.execution.repository.ProjectTestCaseSourceRepository;
+import com.company.casehub.execution.repository.ProjectTestCaseTriggerRepository;
 import com.company.casehub.execution.service.ExecutionService;
 import com.company.casehub.execution.service.ProjectTestPlanService;
 import com.company.casehub.generation.dto.GenerationRuleRequest;
@@ -72,6 +75,14 @@ import com.company.casehub.user.repository.UserRoleRepository;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.function.Supplier;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -112,6 +123,7 @@ class Batch4QAVerificationIT extends AbstractIntegrationTest {
     @Autowired private StandardTaskTypeRepository standardRepository;
     @Autowired private CapabilityRepository capabilityRepository;
     @Autowired private GenerationRunRepository generationRunRepository;
+    @Autowired private ProjectTestCaseTriggerRepository triggerRepository;
 
     private UserEntity coordinator;
     private UserEntity tester;
@@ -262,7 +274,7 @@ class Batch4QAVerificationIT extends AbstractIntegrationTest {
         CustomTestCaseResponse first = customService.create(projectA, customRequest("Q4-SCOPED-1", List.of(), List.of()),
                 testerPrincipal);
         CustomTestCaseResponse linked = customService.create(projectA,
-                customRequest("Q4-SCOPED-2", List.of(), List.of(first.id())), testerPrincipal);
+                customRequest("Q4-SCOPED-2", TransitionType.NEXT_CASE, List.of(), List.of(first.id())), testerPrincipal);
         assertThat(linked.decisionPoints().get(0).targets().get(0).customTestCaseId()).isEqualTo(first.id());
 
         // ... but a case carrying a custom target can never be submitted to the library.
@@ -273,7 +285,7 @@ class Batch4QAVerificationIT extends AbstractIntegrationTest {
         // A master-backed target submits cleanly and lands in the library without custom targets.
         UUID masterTarget = publishMaster("Q4-LIB-TARGET", false);
         CustomTestCaseResponse submitable = customService.create(projectA,
-                customRequest("Q4-SCOPED-3", List.of(masterTarget), List.of()), testerPrincipal);
+                customRequest("Q4-SCOPED-3", TransitionType.NEXT_CASE, List.of(masterTarget), List.of()), testerPrincipal);
         var submission = customService.submitToLibrary(projectA, submitable.id(), testerPrincipal);
         var libraryVersion = versionRepository.findById(submission.draftVersionId()).orElseThrow();
 
@@ -401,6 +413,120 @@ class Batch4QAVerificationIT extends AbstractIntegrationTest {
         assertThat(changeRequestService.list(draftOnly.id(), testerPrincipal)).isEmpty();
     }
 
+    @Test
+    void customTransitionsEnforceCardinalityDuplicatesAndDisplayOrderBeforePersistence() {
+        UUID projectId = createProject();
+        joinAsTester(projectId);
+        UUID masterA = publishMaster("Q4-CARD-A", false);
+        UUID masterB = publishMaster("Q4-CARD-B", false);
+
+        for (TransitionType type : List.of(TransitionType.PASS, TransitionType.FAIL, TransitionType.N_A)) {
+            assertCustomRejected(projectId, customRequest("Q4-INVALID-" + type, type, List.of(masterA), List.of()), ErrorCode.TEST_CASE_TRANSITION_TARGET_COUNT_INVALID);
+        }
+        assertCustomRejected(projectId, customRequest("Q4-NEXT-EMPTY", TransitionType.NEXT_CASE, List.of(), List.of()), ErrorCode.TEST_CASE_TRANSITION_TARGET_COUNT_INVALID);
+        assertCustomRejected(projectId, customRequest("Q4-NEXT-TWO", TransitionType.NEXT_CASE, List.of(masterA, masterB), List.of()), ErrorCode.TEST_CASE_TRANSITION_TARGET_COUNT_INVALID);
+        assertCustomRejected(projectId, customRequest("Q4-NEXTS-EMPTY", TransitionType.NEXT_CASES, List.of(), List.of()), ErrorCode.TEST_CASE_TRANSITION_TARGET_COUNT_INVALID);
+        assertCustomRejected(projectId, customRequest("Q4-NULL-TARGET", TransitionType.NEXT_CASES, Arrays.asList((UUID) null), List.of()), ErrorCode.TEST_CASE_TRANSITION_TARGET_INVALID);
+        assertCustomRejected(projectId, customRequest("Q4-DUP-MASTER", TransitionType.NEXT_CASES, Arrays.asList(masterA, masterA), List.of()), ErrorCode.TEST_CASE_TRANSITION_TARGET_INVALID);
+
+        CustomTestCaseResponse customTarget = customService.create(projectId, customRequest("Q4-CUSTOM-TARGET", TransitionType.PASS, List.of(), List.of()), testerPrincipal);
+        assertCustomRejected(projectId, customRequest("Q4-DUP-CUSTOM", TransitionType.NEXT_CASES, List.of(), Arrays.asList(customTarget.id(), customTarget.id())), ErrorCode.TEST_CASE_TRANSITION_TARGET_INVALID);
+
+        CustomTestCaseRequest duplicateOrders = new CustomTestCaseRequest("Q4-DUP-ORDER-" + UUID.randomUUID(), "Custom", "purpose", "pre", SelectionMode.SINGLE, false, null, null,
+                List.of(new CustomStepRequest("step", "act")), List.of(
+                new CustomDecisionPointRequest("one", null, 1, TransitionType.PASS, List.of(), List.of()),
+                new CustomDecisionPointRequest("two", null, 1, TransitionType.PASS, List.of(), List.of())));
+        assertCustomRejected(projectId, duplicateOrders, ErrorCode.CUSTOM_CASE_TARGET_INVALID);
+
+        assertThat(customService.create(projectId, customRequest("Q4-VALID-PASS", TransitionType.PASS, List.of(), List.of()), testerPrincipal)).isNotNull();
+        assertThat(customService.create(projectId, customRequest("Q4-VALID-NEXT", TransitionType.NEXT_CASE, List.of(masterA), List.of()), testerPrincipal)).isNotNull();
+        assertThat(customService.create(projectId, customRequest("Q4-VALID-NEXTS", TransitionType.NEXT_CASES, List.of(masterA, masterB), List.of()), testerPrincipal)).isNotNull();
+    }
+
+    @Test
+    void terminalCustomTransitionCreatesNoRuntimeTargetOrTrigger() {
+        UUID projectId = createProject();
+        joinAsTester(projectId);
+        CustomTestCaseResponse custom = customService.create(projectId, customRequest("Q4-TERMINAL", TransitionType.PASS, List.of(), List.of()), testerPrincipal);
+        UUID pointId = custom.decisionPoints().get(0).id();
+        executionService.start(custom.projectTestCaseId(), testerPrincipal);
+        var result = executionService.complete(custom.projectTestCaseId(), new CompleteExecutionRequest(List.of(pointId)), testerPrincipal);
+        assertThat(result.branchOutcomes()).singleElement().satisfies(outcome -> {
+            assertThat(outcome.targetMasterTestCaseId()).isNull();
+            assertThat(outcome.targetCustomTestCaseId()).isNull();
+        });
+        assertThat(triggerRepository.findBySourceProjectTestCaseId(custom.projectTestCaseId())).isEmpty();
+    }
+
+    @Test
+    void customAssignmentRequiresTesterRoleEvenForManagedProjects() {
+        UUID projectId = createProject();
+        joinAsTester(projectId);
+        CustomTestCaseResponse custom = customService.create(projectId, customRequest("Q4-ASSIGNEE", TransitionType.PASS, List.of(), List.of()), testerPrincipal);
+        UserEntity ordinary = userRepository.save(new UserEntity("q4_plain_" + UUID.randomUUID(), "Plain", "hash"));
+        UserEntity coordinatorTester = userRepository.save(new UserEntity("q4_both_" + UUID.randomUUID(), "Coordinator Tester", "hash"));
+        RoleEntity testerRole = roleRepository.findByCode("TESTER").orElseThrow();
+        userRoleRepository.save(new UserRoleEntity(coordinatorTester, roleRepository.findByCode("TEST_COORDINATOR").orElseThrow()));
+        userRoleRepository.save(new UserRoleEntity(coordinatorTester, testerRole));
+
+        assertThatThrownBy(() -> customService.assign(projectId, custom.id(), coordinator.getId(), coordinatorPrincipal))
+                .isInstanceOf(ConflictException.class).hasFieldOrPropertyWithValue("errorCode", ErrorCode.PROJECT_TEST_CASE_ASSIGNEE_INVALID);
+        assertThatThrownBy(() -> customService.assign(projectId, custom.id(), ordinary.getId(), coordinatorPrincipal))
+                .isInstanceOf(ConflictException.class).hasFieldOrPropertyWithValue("errorCode", ErrorCode.PROJECT_TEST_CASE_ASSIGNEE_INVALID);
+        customService.assign(projectId, custom.id(), tester.getId(), coordinatorPrincipal);
+        customService.assign(projectId, custom.id(), coordinatorTester.getId(), coordinatorPrincipal);
+        assertThat(assigneeRepository.findByProjectTestCaseId(custom.projectTestCaseId()))
+                .extracting(assignment -> assignment.getUser().getId()).contains(tester.getId(), coordinatorTester.getId());
+    }
+
+    @Test
+    void concurrentCapabilityReviewsAllowExactlyOneSideEffect() throws Exception {
+        UUID projectId = createProject();
+        joinAsTester(projectId);
+        CapabilityEntity capability = capability("Q4-CONCURRENT-CAP");
+        var request = capabilityRequestService.submit(projectId, capability.getId(), new CapabilityUpdateRequestPayload(ProjectCapabilityValue.YES, "Observed", "evidence"), testerPrincipal);
+        List<Throwable> failures = runConcurrently(() -> capabilityRequestService.review(request.id(), true, new ReviewRequestPayload("concurrent"), coordinatorPrincipal));
+        assertThat(failures).hasSize(1).first().isInstanceOf(ConflictException.class);
+        assertThat(generationRunRepository.findByProjectIdOrderByExecutedAtDesc(projectId)).filteredOn(r -> r.getTriggerType() == GenerationTriggerType.CAPABILITY_UPDATE).hasSize(1);
+        assertThat(capabilityRequestService.list(projectId, coordinatorPrincipal)).filteredOn(r -> r.id().equals(request.id())).singleElement().extracting(r -> r.status()).isEqualTo(CapabilityUpdateRequestStatus.APPROVED);
+    }
+
+    @Test
+    void concurrentChangeReviewsCreateExactlyOneRevisionDraft() throws Exception {
+        UUID masterId = publishMaster("Q4-CONCURRENT-CHANGE", false);
+        UUID sourceVersionId = versionRepository.findByMasterTestCaseIdOrderByVersionMajorDescVersionMinorDesc(masterId).get(0).getId();
+        var request = changeRequestService.submit(masterId, new TestCaseChangeRequestPayload(sourceVersionId, "concurrent revision"), testerPrincipal);
+        List<Throwable> failures = runConcurrently(() -> changeRequestService.review(request.id(), true, new ReviewRequestPayload("concurrent"), coordinatorPrincipal));
+        assertThat(failures).hasSize(1).first().isInstanceOf(ConflictException.class);
+        var saved = changeRequestService.list(masterId, coordinatorPrincipal).stream().filter(item -> item.id().equals(request.id())).toList();
+        assertThat(saved).singleElement();
+        assertThat(saved.get(0).status().name()).isEqualTo("APPROVED");
+        assertThat(saved.get(0).revisionDraftVersionId()).isNotNull();
+        assertThat(versionRepository.findByMasterTestCaseIdOrderByVersionMajorDescVersionMinorDesc(masterId)).filteredOn(v -> v.getStatus() == com.company.casehub.testcase.entity.TestCaseVersionStatus.DRAFT).hasSize(1);
+    }
+
+    private void assertCustomRejected(UUID projectId, CustomTestCaseRequest request, ErrorCode errorCode) {
+        assertThatThrownBy(() -> customService.create(projectId, request, testerPrincipal))
+                .isInstanceOfAny(BusinessRuleException.class, ConflictException.class, ValidationException.class)
+                .hasFieldOrPropertyWithValue("errorCode", errorCode);
+    }
+
+    private List<Throwable> runConcurrently(Supplier<?> operation) throws Exception {
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+        List<Future<?>> futures = new ArrayList<>();
+        for (int i = 0; i < 2; i++) futures.add(executor.submit(() -> { ready.countDown(); start.await(); return operation.get(); }));
+        ready.await();
+        start.countDown();
+        List<Throwable> failures = new ArrayList<>();
+        for (Future<?> future : futures) {
+            try { future.get(); } catch (ExecutionException exception) { failures.add(exception.getCause()); }
+        }
+        executor.shutdownNow();
+        return failures;
+    }
+
     // ------------------------------------------------------------------ helpers
 
     private void joinAsTester(UUID projectId) {
@@ -411,10 +537,14 @@ class Batch4QAVerificationIT extends AbstractIntegrationTest {
     }
 
     private CustomTestCaseRequest customRequest(String code, List<UUID> masterTargets, List<UUID> customTargets) {
+        return customRequest(code, TransitionType.PASS, masterTargets, customTargets);
+    }
+
+    private CustomTestCaseRequest customRequest(String code, TransitionType transitionType, List<UUID> masterTargets, List<UUID> customTargets) {
         return new CustomTestCaseRequest(code + "-" + UUID.randomUUID().toString().substring(0, 6), "Custom case",
                 "purpose", "pre", SelectionMode.SINGLE, false, null, null,
                 List.of(new CustomStepRequest("step", "do it")),
-                List.of(new CustomDecisionPointRequest("Done", "terminal", 1, TransitionType.PASS,
+                List.of(new CustomDecisionPointRequest("Done", "transition", 1, transitionType,
                         masterTargets, customTargets)));
     }
 

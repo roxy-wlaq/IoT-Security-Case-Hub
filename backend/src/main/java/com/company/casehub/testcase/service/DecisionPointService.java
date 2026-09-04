@@ -195,9 +195,13 @@ public class DecisionPointService {
         List<UUID> distinct = new ArrayList<>();
         List<UUID> supplied = ids == null ? List.of() : ids;
         for (UUID id : supplied) {
-            if (id != null && !distinct.contains(id)) distinct.add(id);
+            if (id == null) {
+                throw new ValidationException(ErrorCode.TEST_CASE_TRANSITION_TARGET_INVALID,
+                        "A transition target ID cannot be null.");
+            }
+            if (!distinct.contains(id)) distinct.add(id);
         }
-        if (distinct.size() != supplied.stream().filter(Objects::nonNull).count()) {
+        if (distinct.size() != supplied.size()) {
             throw new ValidationException(ErrorCode.TEST_CASE_TRANSITION_TARGET_INVALID,
                     "A transition cannot contain duplicate target Master Test Cases.");
         }

@@ -70,7 +70,7 @@ public class CapabilityUpdateRequestService {
 
     @Transactional
     public CapabilityUpdateRequestResponse review(UUID requestId, boolean approve, ReviewRequestPayload payload, UserPrincipal principal) {
-        CapabilityUpdateRequestEntity request = requestRepository.findById(requestId).orElseThrow(() -> new ResourceNotFoundException(ErrorCode.CAPABILITY_REQUEST_NOT_FOUND, "Capability Update Request not found"));
+        CapabilityUpdateRequestEntity request = requestRepository.findByIdForUpdate(requestId).orElseThrow(() -> new ResourceNotFoundException(ErrorCode.CAPABILITY_REQUEST_NOT_FOUND, "Capability Update Request not found"));
         accessPolicy.requireManage(request.getProject().getId(), principal);
         if (request.getStatus() != CapabilityUpdateRequestStatus.PENDING) throw new ConflictException(ErrorCode.CAPABILITY_REQUEST_STATE_INVALID, "Request is already reviewed");
         UserEntity reviewer = currentUser(principal); request.setReviewedBy(reviewer); request.setReviewComment(payload == null ? null : trim(payload.comment()));

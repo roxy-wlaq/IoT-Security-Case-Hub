@@ -2,6 +2,7 @@ package com.company.casehub.testcase.service;
 
 import com.company.casehub.common.exception.BusinessRuleException;
 import com.company.casehub.common.exception.ErrorCode;
+import com.company.casehub.common.exception.ValidationException;
 import com.company.casehub.testcase.entity.DecisionPointEntity;
 import com.company.casehub.testcase.entity.TestCaseVersionEntity;
 import com.company.casehub.testcase.entity.TransitionTargetEntity;
@@ -28,6 +29,17 @@ public class DagValidationService {
     }
 
     public void validateTransitionTargets(TransitionType type, Collection<UUID> targetIds) {
+        if (targetIds != null) {
+            Set<UUID> unique = new HashSet<>();
+            for (UUID targetId : targetIds) {
+                if (targetId == null) {
+                    throw new ValidationException(ErrorCode.TEST_CASE_TRANSITION_TARGET_INVALID, "Transition targets cannot contain null IDs.");
+                }
+                if (!unique.add(targetId)) {
+                    throw new ValidationException(ErrorCode.TEST_CASE_TRANSITION_TARGET_INVALID, "A transition cannot contain duplicate targets.");
+                }
+            }
+        }
         int count = targetIds == null ? 0 : targetIds.size();
         boolean valid = switch (type) {
             case PASS, FAIL, N_A -> count == 0;

@@ -7,6 +7,7 @@ import com.company.casehub.common.exception.ConflictException;
 import com.company.casehub.common.exception.ErrorCode;
 import com.company.casehub.common.exception.ForbiddenOperationException;
 import com.company.casehub.common.exception.ResourceNotFoundException;
+import com.company.casehub.common.exception.ValidationException;
 import com.company.casehub.customcase.dto.CustomDecisionPointRequest;
 import com.company.casehub.customcase.dto.CustomTestCaseRequest;
 import com.company.casehub.customcase.dto.CustomTestCaseResponse;
@@ -38,8 +39,11 @@ import com.company.casehub.testcase.entity.TransitionEntity;
 import com.company.casehub.testcase.entity.TransitionTargetEntity;
 import com.company.casehub.testcase.repository.MasterTestCaseRepository;
 import com.company.casehub.testcase.repository.RevisionContributorRepository;
+import com.company.casehub.testcase.service.DagValidationService;
+import com.company.casehub.user.entity.RoleEntity;
 import com.company.casehub.user.entity.UserEntity;
 import com.company.casehub.user.repository.UserRepository;
+import com.company.casehub.user.repository.UserRoleRepository;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -62,6 +66,9 @@ public class CustomTestCaseService {
     private final MasterTestCaseRepository masterRepository;
     private final CategoryRepository categoryRepository;
     private final RevisionContributorRepository contributorRepository;
+    private final DagValidationService dagValidationService;
+    private final com.company.casehub.user.repository.RoleRepository roleRepository;
+    private final UserRoleRepository userRoleRepository;
 
     public CustomTestCaseService(ProjectCustomTestCaseRepository customRepository, ProjectRepository projectRepository,
                                  ProjectCoordinatorRepository coordinatorRepository, ProjectAccessPolicy accessPolicy,
@@ -69,7 +76,8 @@ public class CustomTestCaseService {
                                  ProjectTestCaseSourceRepository sourceRepository,
                                  ProjectTestCaseAssigneeRepository assigneeRepository,
                                  MasterTestCaseRepository masterRepository, CategoryRepository categoryRepository,
-                                 RevisionContributorRepository contributorRepository) {
+                                 RevisionContributorRepository contributorRepository, DagValidationService dagValidationService,
+                                 com.company.casehub.user.repository.RoleRepository roleRepository, UserRoleRepository userRoleRepository) {
         this.customRepository = customRepository;
         this.projectRepository = projectRepository;
         this.coordinatorRepository = coordinatorRepository;
@@ -81,6 +89,9 @@ public class CustomTestCaseService {
         this.masterRepository = masterRepository;
         this.categoryRepository = categoryRepository;
         this.contributorRepository = contributorRepository;
+        this.dagValidationService = dagValidationService;
+        this.roleRepository = roleRepository;
+        this.userRoleRepository = userRoleRepository;
     }
 
     @Transactional
@@ -140,7 +151,7 @@ public class CustomTestCaseService {
     public void assign(UUID projectId, UUID customId, UUID userId, UserPrincipal principal) {
         ProjectCustomTestCaseEntity custom = requireCustom(projectId, customId);
         accessPolicy.requireManage(projectId, principal);
-        UserEntity target = userRepository.findById(userId).orElseThrow(() -> new ResourceNotFoundException(ErrorCode.RESOURCE_NOT_FOUND, "User not found"));
+        UserEntity target = requireTester(userId);
         ProjectTestCaseEntity ptc = projectTestCaseRepository.findByProjectIdAndCustomTestCaseId(projectId, customId).orElseThrow();
         if (!assigneeRepository.existsByProjectTestCaseIdAndUserId(ptc.getId(), target.getId())) addAssignee(ptc, target);
     }
@@ -217,12 +228,21 @@ public class CustomTestCaseService {
             CustomTestStepEntity step = new CustomTestStepEntity(); step.setCustomTestCase(custom); step.setSequenceNo(seq++); step.setTitle(trimToNull(item.title())); step.setContent(item.content().trim()); custom.getSteps().add(step);
         }
         custom.getDecisionPoints().clear();
+        java.util.Set<Integer> displayOrders = new java.util.HashSet<>();
         for (CustomDecisionPointRequest item : request.decisionPoints() == null ? List.<CustomDecisionPointRequest>of() : request.decisionPoints()) {
+            if (!displayOrders.add(item.displayOrder())) {
+                throw new ValidationException(ErrorCode.CUSTOM_CASE_TARGET_INVALID, "Custom Decision Point displayOrder must be unique within a case.");
+            }
             DecisionPointEntity point = new DecisionPointEntity(); point.setCustomTestCase(custom); point.setDisplayOrder(item.displayOrder()); point.setName(item.name().trim()); point.setDescription(trimToNull(item.description()));
             TransitionEntity transition = new TransitionEntity(); transition.setDecisionPoint(point); transition.setType(item.transitionType());
             List<UUID> masterIds = item.targetMasterTestCaseIds() == null ? List.of() : item.targetMasterTestCaseIds();
             List<UUID> customIds = item.targetCustomTestCaseIds() == null ? List.of() : item.targetCustomTestCaseIds();
             if (!masterIds.isEmpty() && !customIds.isEmpty()) throw new ConflictException(ErrorCode.CUSTOM_CASE_TARGET_INVALID, "A target must be Master-based or Custom-based");
+            // Resolve project-scoped Custom targets before generic transition validation so a
+            // cross-project reference retains the stable CUSTOM_CASE_NOT_FOUND boundary.
+            for (UUID customId : customIds) requireCustom(custom.getProject().getId(), customId);
+            List<UUID> effectiveTargets = !masterIds.isEmpty() ? masterIds : customIds;
+            dagValidationService.validateTransitionTargets(item.transitionType(), effectiveTargets);
             int order = 1;
             for (UUID id : masterIds) { TransitionTargetEntity target = new TransitionTargetEntity(); target.setTransition(transition); target.setTargetOrder(order++); target.setTargetMasterTestCase(masterRepository.findById(id).orElseThrow(() -> new ResourceNotFoundException(ErrorCode.TEST_CASE_NOT_FOUND, "Master target not found"))); transition.getTargets().add(target); }
             for (UUID id : customIds) { TransitionTargetEntity target = new TransitionTargetEntity(); target.setTransition(transition); target.setTargetOrder(order++); target.setTargetCustomTestCase(requireCustom(custom.getProject().getId(), id)); transition.getTargets().add(target); }
@@ -244,6 +264,14 @@ public class CustomTestCaseService {
     private ProjectCustomTestCaseEntity requireCustom(UUID projectId, UUID id) { return customRepository.findByIdAndProjectId(id, projectId).orElseThrow(() -> new ResourceNotFoundException(ErrorCode.CUSTOM_CASE_NOT_FOUND, "Custom Test Case not found")); }
     private ProjectEntity requireProject(UUID id) { return projectRepository.findById(id).orElseThrow(() -> new ResourceNotFoundException(ErrorCode.PROJECT_NOT_FOUND, "Project not found")); }
     private UserEntity currentUser(UserPrincipal principal) { return userRepository.findById(principal.getId()).orElseThrow(() -> new ResourceNotFoundException(ErrorCode.RESOURCE_NOT_FOUND, "User not found")); }
+    private UserEntity requireTester(UUID userId) {
+        UserEntity user = userRepository.findById(userId).orElseThrow(() -> new ResourceNotFoundException(ErrorCode.RESOURCE_NOT_FOUND, "User not found"));
+        RoleEntity testerRole = roleRepository.findByCode("TESTER").orElseThrow(() -> new ResourceNotFoundException(ErrorCode.RESOURCE_NOT_FOUND, "TESTER role not found"));
+        if (userRoleRepository.findByUserId(userId).stream().noneMatch(link -> link.getRole().getId().equals(testerRole.getId()))) {
+            throw new ConflictException(ErrorCode.PROJECT_TEST_CASE_ASSIGNEE_INVALID, "Assignee must have TESTER role");
+        }
+        return user;
+    }
     private CustomTestCaseResponse response(ProjectCustomTestCaseEntity custom, UUID ptcId) { return new CustomTestCaseResponse(custom.getId(), custom.getProject().getId(), custom.getCaseCode(), custom.getCaseName(), custom.getTestPurpose(), custom.getPreconditions(), custom.getSelectionMode(), custom.isEvidenceRequired(), custom.getEvidenceRequirement(), custom.getRemarkRequirement(), ptcId, custom.getCreatedBy().getId(), custom.getSteps().stream().sorted(Comparator.comparingInt(CustomTestStepEntity::getSequenceNo)).map(s -> new StepResponse(s.getId(), s.getSequenceNo(), s.getTitle(), s.getContent())).toList(), custom.getDecisionPoints().stream().sorted(Comparator.comparingInt(DecisionPointEntity::getDisplayOrder)).map(p -> new DecisionPointResponse(p.getId(), p.getDisplayOrder(), p.getName(), p.getDescription(), p.getTransition() == null ? null : p.getTransition().getType(), p.getTransition() == null ? List.of() : p.getTransition().getTargets().stream().sorted(Comparator.comparingInt(TransitionTargetEntity::getTargetOrder)).map(t -> new TargetResponse(t.getTargetMasterTestCase() == null ? null : t.getTargetMasterTestCase().getId(), t.getTargetCustomTestCase() == null ? null : t.getTargetCustomTestCase().getId(), t.getTargetMasterTestCase() == null ? t.getTargetCustomTestCase().getCaseCode() : t.getTargetMasterTestCase().getCaseCode())).toList())).toList(), custom.getCreatedAt(), custom.getUpdatedAt()); }
     private static String trimToNull(String value) { return StringUtils.hasText(value) ? value.trim() : null; }
 }
