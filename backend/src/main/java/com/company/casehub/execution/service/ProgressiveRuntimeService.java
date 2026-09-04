@@ -1,6 +1,7 @@
 package com.company.casehub.execution.service;
 
 import com.company.casehub.auth.security.UserPrincipal;
+import com.company.casehub.customcase.repository.ProjectCustomTestCaseRepository;
 import com.company.casehub.common.exception.BusinessRuleException;
 import com.company.casehub.common.exception.ConflictException;
 import com.company.casehub.common.exception.ErrorCode;
@@ -51,6 +52,7 @@ public class ProgressiveRuntimeService {
     private final DecisionPointRepository decisionPointRepository;
     private final TestCaseVersionRepository versionRepository;
     private final UserRepository userRepository;
+    private final ProjectCustomTestCaseRepository customCaseRepository;
 
     public ProgressiveRuntimeService(ProjectTestCaseRepository testCaseRepository,
                                      ProjectTestCaseSourceRepository sourceRepository,
@@ -60,7 +62,8 @@ public class ProgressiveRuntimeService {
                                      BranchOutcomeRepository outcomeRepository,
                                      DecisionPointRepository decisionPointRepository,
                                      TestCaseVersionRepository versionRepository,
-                                     UserRepository userRepository) {
+                                     UserRepository userRepository,
+                                     ProjectCustomTestCaseRepository customCaseRepository) {
         this.testCaseRepository = testCaseRepository;
         this.sourceRepository = sourceRepository;
         this.triggerRepository = triggerRepository;
@@ -70,13 +73,16 @@ public class ProgressiveRuntimeService {
         this.decisionPointRepository = decisionPointRepository;
         this.versionRepository = versionRepository;
         this.userRepository = userRepository;
+        this.customCaseRepository = customCaseRepository;
     }
 
     @Transactional
     public ExecutionResponse complete(ProjectTestCaseEntity source, List<UUID> selectedIds, UserPrincipal principal) {
         TestCaseVersionEntity version = source.getTestCaseVersion();
-        List<DecisionPointEntity> points = decisionPointRepository.findByTestCaseVersionIdOrderByDisplayOrderAscIdAsc(version.getId());
-        validateSelections(version.getSelectionMode(), points, selectedIds);
+        List<DecisionPointEntity> points = version != null
+                ? decisionPointRepository.findByTestCaseVersionIdOrderByDisplayOrderAscIdAsc(version.getId())
+                : decisionPointRepository.findByCustomTestCaseIdOrderByDisplayOrderAscIdAsc(source.getCustomTestCase().getId());
+        validateSelections(version != null ? version.getSelectionMode() : source.getCustomTestCase().getSelectionMode(), points, selectedIds);
         Set<UUID> selected = new HashSet<>(selectedIds);
         List<UUID> affected = new ArrayList<>();
         for (ProjectTestCaseTriggerEntity trigger : new ArrayList<>(triggerRepository.findBySourceProjectTestCaseId(source.getId()))) {
@@ -101,15 +107,18 @@ public class ProgressiveRuntimeService {
             for (TransitionTargetEntity target : transition.getTargets()) {
                 BranchOutcomeEntity outcome = new BranchOutcomeEntity();
                 outcome.setProjectTestCase(source); outcome.setDecisionPoint(point); outcome.setTransitionType(transition.getType());
-                outcome.setTargetMasterTestCase(target.getTargetMasterTestCase()); outcomeRepository.save(outcome);
-                ProjectTestCaseEntity targetPtc = ensureTarget(source, point, target.getTargetMasterTestCase().getId(), principal);
+                outcome.setTargetMasterTestCase(target.getTargetMasterTestCase());
+                outcome.setTargetCustomTestCase(target.getTargetCustomTestCase()); outcomeRepository.save(outcome);
+                ProjectTestCaseEntity targetPtc = ensureTarget(source, point, target, principal);
                 affected.add(targetPtc.getId());
-                responses.add(new ExecutionResponse.BranchOutcomeResponse(point.getId(), transition.getType(), target.getTargetMasterTestCase().getId()));
+                responses.add(new ExecutionResponse.BranchOutcomeResponse(point.getId(), transition.getType(),
+                        target.getTargetMasterTestCase() == null ? null : target.getTargetMasterTestCase().getId(),
+                        target.getTargetCustomTestCase() == null ? null : target.getTargetCustomTestCase().getId()));
             }
             if (transition.getTargets().isEmpty()) {
                 BranchOutcomeEntity outcome = new BranchOutcomeEntity();
                 outcome.setProjectTestCase(source); outcome.setDecisionPoint(point); outcome.setTransitionType(transition.getType()); outcomeRepository.save(outcome);
-                responses.add(new ExecutionResponse.BranchOutcomeResponse(point.getId(), transition.getType(), null));
+                responses.add(new ExecutionResponse.BranchOutcomeResponse(point.getId(), transition.getType(), null, null));
             }
         }
         source.setExecutionStatus(ExecutionStatus.COMPLETED);
@@ -120,16 +129,25 @@ public class ProgressiveRuntimeService {
         return new ExecutionResponse(source.getId(), source.getExecutionStatus(), selectedIds, responses, affected.stream().distinct().toList());
     }
 
-    private ProjectTestCaseEntity ensureTarget(ProjectTestCaseEntity source, DecisionPointEntity point, UUID masterId, UserPrincipal principal) {
-        ProjectTestCaseEntity target = testCaseRepository.findByProjectIdAndMasterTestCaseId(source.getProject().getId(), masterId).orElse(null);
+    private ProjectTestCaseEntity ensureTarget(ProjectTestCaseEntity source, DecisionPointEntity point, TransitionTargetEntity targetLink, UserPrincipal principal) {
+        UUID masterId = targetLink.getTargetMasterTestCase() == null ? null : targetLink.getTargetMasterTestCase().getId();
+        UUID customId = targetLink.getTargetCustomTestCase() == null ? null : targetLink.getTargetCustomTestCase().getId();
+        ProjectTestCaseEntity target = masterId != null
+                ? testCaseRepository.findByProjectIdAndMasterTestCaseId(source.getProject().getId(), masterId).orElse(null)
+                : testCaseRepository.findByProjectIdAndCustomTestCaseId(source.getProject().getId(), customId).orElse(null);
         if (target == null) {
-            TestCaseVersionEntity version = versionRepository.findByMasterTestCaseIdOrderByVersionMajorDescVersionMinorDesc(masterId).stream()
-                    .filter(v -> v.isCurrentVersion() && v.getStatus() == TestCaseVersionStatus.PUBLISHED).findFirst()
-                    .orElseThrow(() -> new ConflictException(ErrorCode.PROJECT_TEST_CASE_VERSION_INVALID, "No current Published Version for target"));
             UserEntity actor = userRepository.findById(principal.getId()).orElseThrow();
-            testCaseRepository.insertRuntimeTargetIfAbsent(UUID.randomUUID(), source.getProject().getId(), masterId,
-                    version.getId(), actor.getId());
-            target = testCaseRepository.findByProjectIdAndMasterTestCaseId(source.getProject().getId(), masterId).orElseThrow();
+            if (masterId != null) {
+                TestCaseVersionEntity targetVersion = versionRepository.findByMasterTestCaseIdOrderByVersionMajorDescVersionMinorDesc(masterId).stream()
+                        .filter(v -> v.isCurrentVersion() && v.getStatus() == TestCaseVersionStatus.PUBLISHED).findFirst()
+                        .orElseThrow(() -> new ConflictException(ErrorCode.PROJECT_TEST_CASE_VERSION_INVALID, "No current Published Version for target"));
+                testCaseRepository.insertRuntimeTargetIfAbsent(UUID.randomUUID(), source.getProject().getId(), masterId, targetVersion.getId(), actor.getId());
+                target = testCaseRepository.findByProjectIdAndMasterTestCaseId(source.getProject().getId(), masterId).orElseThrow();
+            } else {
+                customCaseRepository.findByIdAndProjectId(customId, source.getProject().getId()).orElseThrow(() -> new ConflictException(ErrorCode.CUSTOM_CASE_TARGET_INVALID, "Custom target is not in the source Project"));
+                testCaseRepository.insertCustomRuntimeTargetIfAbsent(UUID.randomUUID(), source.getProject().getId(), customId, actor.getId());
+                target = testCaseRepository.findByProjectIdAndCustomTestCaseId(source.getProject().getId(), customId).orElseThrow();
+            }
         }
         target.setRemoved(false);
         if (!sourceRepository.existsByProjectTestCaseIdAndSourceType(target.getId(), ProjectTestCaseSourceType.PROGRESSIVE)) {

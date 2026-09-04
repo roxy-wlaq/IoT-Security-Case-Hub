@@ -85,7 +85,8 @@ public class MyTestQueryService {
     private MyCaseResponse toCase(ProjectTestCaseEntity entity, ProjectTestCaseAssigneeEntity assignment) {
         boolean assigned = assignment != null;
         return new MyCaseResponse(entity.getId(), entity.getProject().getId(), entity.getProject().getProjectNumber(),
-                entity.getMasterTestCase().getId(), entity.getTestCaseVersion().getId(), entity.getMasterTestCase().getCaseCode(),
+                entity.getMasterTestCase() == null ? null : entity.getMasterTestCase().getId(), entity.getCustomTestCase() == null ? null : entity.getCustomTestCase().getId(),
+                entity.getTestCaseVersion() == null ? null : entity.getTestCaseVersion().getId(), entity.getMasterTestCase() != null ? entity.getMasterTestCase().getCaseCode() : entity.getCustomTestCase().getCaseCode(),
                 entity.getExecutionStatus(), entity.getRelationStatus(), entity.isRemoved(), assigned,
                 assigned && assignment.getFirstViewedAt() == null, !assigned, assigned ? assignment.getFirstViewedAt() : null);
     }

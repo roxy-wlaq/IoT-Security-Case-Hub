@@ -1,6 +1,7 @@
 package com.company.casehub.execution.entity;
 
 import com.company.casehub.common.BaseEntity;
+import com.company.casehub.customcase.entity.ProjectCustomTestCaseEntity;
 import com.company.casehub.project.entity.ProjectEntity;
 import com.company.casehub.testcase.entity.MasterTestCaseEntity;
 import com.company.casehub.testcase.entity.TestCaseVersionEntity;
@@ -31,13 +32,17 @@ public class ProjectTestCaseEntity extends BaseEntity {
     @JoinColumn(name = "project_id", nullable = false)
     private ProjectEntity project;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "master_test_case_id", nullable = false)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "master_test_case_id")
     private MasterTestCaseEntity masterTestCase;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "test_case_version_id", nullable = false)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "test_case_version_id")
     private TestCaseVersionEntity testCaseVersion;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "custom_test_case_id")
+    private ProjectCustomTestCaseEntity customTestCase;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "execution_status", nullable = false, length = 24)

@@ -16,6 +16,8 @@ public interface ProjectTestCaseRepository extends JpaRepository<ProjectTestCase
 
     Optional<ProjectTestCaseEntity> findByProjectIdAndMasterTestCaseId(UUID projectId, UUID masterTestCaseId);
 
+    Optional<ProjectTestCaseEntity> findByProjectIdAndCustomTestCaseId(UUID projectId, UUID customTestCaseId);
+
     List<ProjectTestCaseEntity> findByProjectIdOrderByCreatedAtAsc(UUID projectId);
 
     @Query("select distinct p.project from ProjectTestCaseEntity p join p.assignees a where a.user.id = :userId order by p.project.createdAt desc")
@@ -44,4 +46,16 @@ public interface ProjectTestCaseRepository extends JpaRepository<ProjectTestCase
     int insertRuntimeTargetIfAbsent(@Param("id") UUID id, @Param("projectId") UUID projectId,
                                     @Param("masterId") UUID masterId, @Param("versionId") UUID versionId,
                                     @Param("actorId") UUID actorId);
+
+    @Modifying
+    @Query(value = """
+            INSERT INTO casehub.project_test_cases
+              (id, project_id, master_test_case_id, custom_test_case_id, test_case_version_id, execution_status,
+               relation_status, is_root, removed, created_by, last_modified_by, last_modified_at)
+            VALUES (:id, :projectId, NULL, :customId, NULL, 'NOT_STARTED', 'FLOATING', false, false,
+                    :actorId, :actorId, CURRENT_TIMESTAMP)
+            ON CONFLICT (project_id, custom_test_case_id) DO NOTHING
+            """, nativeQuery = true)
+    int insertCustomRuntimeTargetIfAbsent(@Param("id") UUID id, @Param("projectId") UUID projectId,
+                                           @Param("customId") UUID customId, @Param("actorId") UUID actorId);
 }

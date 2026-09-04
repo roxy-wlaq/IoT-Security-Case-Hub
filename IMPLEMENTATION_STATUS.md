@@ -7,7 +7,7 @@
 
 ## Current Phase
 
-**Phase 0–8 已完成，Batch 2（Phase 9–14）与 Batch 3（Phase 15–20）开发完成待 QA**，代码位于 `dev/v1-implementation` 分支。
+**Phase 0–8 已完成，Batch 2（Phase 9–14）、Batch 3（Phase 15–20）与 Batch 4（Phase 21–24）开发完成待 QA**，代码位于 `dev/v1-implementation` 分支。
 
 - 实现状态：`Implementation Complete / Unit + Integration + Frontend Verification`
 - **Round 1（2026-09-02 早）：** 修复 **8 项** Phase 0–3 Code Review 发现（HIGH-01/02/03、MEDIUM-01/02/03/04、LOW-01），每 HIGH 增加 Regression Test，并补齐前端基础测试（MEDIUM-01）。（注：此前内部记录曾误写为"9 项"，实际表格为 8 项，本轮已校正。）
@@ -20,6 +20,7 @@
 - **Phase 8（2026-09-04）：** 已实现 DecisionPoint / Transition / TransitionTarget 的 V009 持久化、Draft 资源级编辑与 Published Immutable、Transition target cardinality、`DagValidationService` 环检测、Submit/Publish 边界校验、Master Logic Graph API 与 React Flow 编辑/只读界面。
 - **Batch 2 / Phase 9–14（2026-09-04）：** 已实现 Project Core、Project Capability effective-value engine、Generation Rule 条件组与输出、FULL/PROGRESSIVE_INITIAL Generation recommendations、Recommended Because、Project-local Ignore、版本绑定 Project Test Plan、TESTER assignee、Remove/Restore、My Projects/My Cases 与 firstViewedAt/NEW；新增 Flyway V010–V015。
 - **Batch 3 / Phase 15–20（2026-09-04）：** 已实现持久化文件 Storage、Evidence、Notes、执行状态与 Decision/Branch Outcome、Progressive Runtime、Trigger/Assignee Union、CONNECTED/FLOATING、Relation Update、Project Logic Graph；新增 Flyway V016。MEDIUM-B Runtime semantic 已解决：运行时严格使用 `ProjectTestCase.testCaseVersionId` 绑定的 `TestCaseVersion`，不会因 Library 新版本静默升级。当前待 QA 验收。
+- **Batch 4 / Phase 21–24（2026-09-04）：** 已实现项目自定义测试用例与统一 PTC 执行、提交测试库生成 Master+DRAFT+Contributor、能力更新请求审批与派生能力/Generation 联动、绑定具体 Published 版本的测试用例变更请求与现有修订生命周期、版本可用性/字段与逻辑 diff/保留或同 PTC 升级；新增 Flyway V017。当前待 QA 验收。
 
 ---
 

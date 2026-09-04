@@ -22,7 +22,7 @@ public class ProjectTestCaseTriggerEntity extends BaseEntity {
     @JoinColumn(name = "source_project_test_case_id", nullable = false)
     private ProjectTestCaseEntity sourceProjectTestCase;
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "source_test_case_version_id", nullable = false)
+    @JoinColumn(name = "source_test_case_version_id")
     private TestCaseVersionEntity sourceTestCaseVersion;
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "source_decision_point_id", nullable = false)

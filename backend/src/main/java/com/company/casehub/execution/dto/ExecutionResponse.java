@@ -9,5 +9,6 @@ public record ExecutionResponse(UUID projectTestCaseId, ExecutionStatus executio
                                 List<UUID> selectedDecisionPointIds,
                                 List<BranchOutcomeResponse> branchOutcomes,
                                 List<UUID> affectedTargetProjectTestCaseIds) {
-    public record BranchOutcomeResponse(UUID decisionPointId, TransitionType transitionType, UUID targetMasterTestCaseId) { }
+    public record BranchOutcomeResponse(UUID decisionPointId, TransitionType transitionType, UUID targetMasterTestCaseId,
+                                        UUID targetCustomTestCaseId) { }
 }

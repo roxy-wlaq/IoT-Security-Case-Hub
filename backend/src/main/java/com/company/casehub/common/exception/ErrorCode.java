@@ -85,6 +85,22 @@ public enum ErrorCode {
     PROJECT_TEST_CASE_ASSIGNEE_INVALID(HttpStatus.BAD_REQUEST, "A Project Test Case assignee must be a TESTER."),
     PROJECT_TEST_CASE_ACCESS_FORBIDDEN(HttpStatus.FORBIDDEN, "You cannot modify this Project Test Case."),
 
+    // ---- Batch 4 Customization & Change Management ----
+    CUSTOM_CASE_NOT_FOUND(HttpStatus.NOT_FOUND, "Project Custom Test Case not found."),
+    CUSTOM_CASE_DUPLICATE(HttpStatus.CONFLICT, "The Custom Test Case code already exists in this Project."),
+    CUSTOM_CASE_ACCESS_FORBIDDEN(HttpStatus.FORBIDDEN, "You do not have access to this Custom Test Case."),
+    CUSTOM_CASE_EDIT_FORBIDDEN(HttpStatus.FORBIDDEN, "You cannot edit this Custom Test Case."),
+    CUSTOM_CASE_TARGET_INVALID(HttpStatus.BAD_REQUEST, "The Custom Test Case target is invalid."),
+    CUSTOM_CASE_LIBRARY_TARGET_INVALID(HttpStatus.UNPROCESSABLE_ENTITY, "Custom targets cannot be submitted to the Master library."),
+    CAPABILITY_REQUEST_NOT_FOUND(HttpStatus.NOT_FOUND, "Capability Update Request not found."),
+    CAPABILITY_REQUEST_STATE_INVALID(HttpStatus.CONFLICT, "The Capability Update Request is not pending."),
+    CAPABILITY_REQUEST_REVIEW_FORBIDDEN(HttpStatus.FORBIDDEN, "Only a Project Coordinator or Admin may review Capability Requests."),
+    CHANGE_REQUEST_NOT_FOUND(HttpStatus.NOT_FOUND, "Test Case Change Request not found."),
+    CHANGE_REQUEST_STATE_INVALID(HttpStatus.CONFLICT, "The Test Case Change Request is not pending."),
+    CHANGE_REQUEST_REVIEW_FORBIDDEN(HttpStatus.FORBIDDEN, "Only a Project Coordinator or Admin may review Change Requests."),
+    VERSION_UPGRADE_FORBIDDEN(HttpStatus.FORBIDDEN, "Only a Project Coordinator or Admin may upgrade a Project Test Case."),
+    VERSION_UPGRADE_INCOMPATIBLE(HttpStatus.UNPROCESSABLE_ENTITY, "The target version is incompatible with recorded execution data."),
+
     // ---- Execution Stack (Phase 15-20) ----
     STORAGE_KEY_INVALID(HttpStatus.BAD_REQUEST, "The storage key is invalid."),
     STORAGE_OBJECT_MISSING(HttpStatus.NOT_FOUND, "The stored object is missing."),

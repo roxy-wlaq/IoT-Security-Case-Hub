@@ -198,6 +198,7 @@ export function TestCaseDetailPage() {
         {actions.reject ? <Button danger onClick={() => { setComment(''); setPending('reject'); }}>驳回</Button> : null}
         {actions.deprecate ? <Button danger onClick={() => { setComment(''); setPending('deprecate'); }}>弃用</Button> : null}
         {actions.createRevision ? <Button onClick={() => { setComment(''); setPending('createRevision'); }}>创建修订</Button> : null}
+        <Button onClick={() => navigate(`/test-cases/${masterId}/change-requests`)}>变更请求</Button>
       </Space>
 
       <Typography.Title level={3}>

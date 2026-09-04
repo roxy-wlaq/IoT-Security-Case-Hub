@@ -24,4 +24,4 @@ export interface Recommendation {
 }
 export interface GenerationRun { id: string; projectId: string; mode: GenerationRunMode; triggerType: string; executedAt: string; recommendations: Recommendation[] }
 export interface GenerationRule { id: string; ruleCode: string; name: string; description?: string; mode: string; status: string; groups: unknown[]; outputMasterTestCaseIds: string[] }
-export interface ProjectTestCase { id: string; masterTestCaseId: string; testCaseVersionId: string; caseCode: string; removed: boolean; sources: string[]; assignees: { userId: string; username: string; displayName: string; firstViewedAt: string | null }[] }
+export interface ProjectTestCase { id: string; masterTestCaseId: string | null; customTestCaseId: string | null; testCaseVersionId: string | null; caseCode: string; removed: boolean; sources: string[]; assignees: { userId: string; username: string; displayName: string; firstViewedAt: string | null }[] }

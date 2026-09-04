@@ -48,13 +48,19 @@ public class ExecutionService {
         if (!accessPolicy.canView(ptc.getProject().getId(), principal)) {
             throw new ForbiddenOperationException(ErrorCode.PROJECT_ACCESS_FORBIDDEN, "You are not a member of this Project");
         }
-        var decisions = decisionPointRepository.findByTestCaseVersionIdOrderByDisplayOrderAscIdAsc(ptc.getTestCaseVersion().getId()).stream()
+        var decisionPoints = ptc.getTestCaseVersion() != null
+                ? decisionPointRepository.findByTestCaseVersionIdOrderByDisplayOrderAscIdAsc(ptc.getTestCaseVersion().getId())
+                : decisionPointRepository.findByCustomTestCaseIdOrderByDisplayOrderAscIdAsc(ptc.getCustomTestCase().getId());
+        var decisions = decisionPoints.stream()
                 .map(d -> new ExecutionDetailResponse.DecisionResponse(d.getId(), d.getDisplayOrder(), d.getName(),
                         d.getTransition() == null ? null : d.getTransition().getType().name(),
-                        d.getTransition() == null ? java.util.List.of() : d.getTransition().getTargets().stream().map(t -> t.getTargetMasterTestCase().getId()).toList()))
+                        d.getTransition() == null ? java.util.List.of() : d.getTransition().getTargets().stream().filter(t -> t.getTargetMasterTestCase() != null).map(t -> t.getTargetMasterTestCase().getId()).toList(),
+                        d.getTransition() == null ? java.util.List.of() : d.getTransition().getTargets().stream().filter(t -> t.getTargetCustomTestCase() != null).map(t -> t.getTargetCustomTestCase().getId()).toList()))
                 .toList();
-        return new ExecutionDetailResponse(ptc.getId(), ptc.getProject().getId(), ptc.getTestCaseVersion().getId(),
-                ptc.getExecutionStatus(), ptc.getTestCaseVersion().getSelectionMode(), ptc.getTestCaseVersion().isEvidenceRequired(), decisions);
+        return new ExecutionDetailResponse(ptc.getId(), ptc.getProject().getId(), ptc.getMasterTestCase() == null ? null : ptc.getMasterTestCase().getId(),
+                ptc.getCustomTestCase() == null ? null : ptc.getCustomTestCase().getId(), ptc.getTestCaseVersion() == null ? null : ptc.getTestCaseVersion().getId(),
+                ptc.getExecutionStatus(), ptc.getTestCaseVersion() != null ? ptc.getTestCaseVersion().getSelectionMode() : ptc.getCustomTestCase().getSelectionMode(),
+                ptc.getTestCaseVersion() != null ? ptc.getTestCaseVersion().isEvidenceRequired() : ptc.getCustomTestCase().isEvidenceRequired(), decisions);
     }
 
     @Transactional
@@ -73,7 +79,8 @@ public class ExecutionService {
         if (ptc.getExecutionStatus() != ExecutionStatus.IN_PROGRESS) {
             throw new com.company.casehub.common.exception.ConflictException(ErrorCode.EXECUTION_INVALID_STATE, "Case must be IN_PROGRESS before completion");
         }
-        if (ptc.getTestCaseVersion().isEvidenceRequired() && evidenceRepository.countByProjectTestCaseId(ptcId) == 0) {
+        if ((ptc.getTestCaseVersion() != null ? ptc.getTestCaseVersion().isEvidenceRequired() : ptc.getCustomTestCase().isEvidenceRequired())
+                && evidenceRepository.countByProjectTestCaseId(ptcId) == 0) {
             throw new com.company.casehub.common.exception.BusinessRuleException(ErrorCode.EVIDENCE_REQUIRED, "Evidence is required before completion");
         }
         return progressiveRuntimeService.complete(ptc, request.selectedDecisionPointIds(), principal);

@@ -1,6 +1,7 @@
 package com.company.casehub.testcase.entity;
 
 import com.company.casehub.common.BaseEntity;
+import com.company.casehub.customcase.entity.ProjectCustomTestCaseEntity;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -21,9 +22,13 @@ import lombok.Setter;
 @NoArgsConstructor
 public class DecisionPointEntity extends BaseEntity {
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "test_case_version_id", nullable = false)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "test_case_version_id")
     private TestCaseVersionEntity testCaseVersion;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "custom_test_case_id")
+    private ProjectCustomTestCaseEntity customTestCase;
 
     @Column(name = "display_order", nullable = false)
     private int displayOrder;

@@ -11,6 +11,7 @@ public record ProjectTestCaseResponse(
         UUID id,
         UUID projectId,
         UUID masterTestCaseId,
+        UUID customTestCaseId,
         UUID testCaseVersionId,
         String caseCode,
         ExecutionStatus executionStatus,

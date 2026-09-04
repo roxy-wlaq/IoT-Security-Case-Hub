@@ -200,8 +200,9 @@ public class ProjectTestPlanService {
         List<ProjectTestCaseResponse.AssigneeResponse> assignees = assigneeRepository.findByProjectTestCaseId(entity.getId()).stream()
                 .map(a -> new ProjectTestCaseResponse.AssigneeResponse(a.getUser().getId(), a.getUser().getUsername(),
                         a.getUser().getDisplayName(), a.getFirstViewedAt())).toList();
-        return new ProjectTestCaseResponse(entity.getId(), entity.getProject().getId(), entity.getMasterTestCase().getId(),
-                entity.getTestCaseVersion().getId(), entity.getMasterTestCase().getCaseCode(), entity.getExecutionStatus(),
+        return new ProjectTestCaseResponse(entity.getId(), entity.getProject().getId(), entity.getMasterTestCase() == null ? null : entity.getMasterTestCase().getId(),
+                entity.getCustomTestCase() == null ? null : entity.getCustomTestCase().getId(), entity.getTestCaseVersion() == null ? null : entity.getTestCaseVersion().getId(),
+                entity.getMasterTestCase() != null ? entity.getMasterTestCase().getCaseCode() : entity.getCustomTestCase().getCaseCode(), entity.getExecutionStatus(),
                 entity.getRelationStatus(), entity.isRemoved(), sources, assignees, entity.getLastModifiedAt());
     }
 }

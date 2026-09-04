@@ -11,5 +11,7 @@ public interface ProjectCoordinatorRepository extends JpaRepository<ProjectCoord
 
     Optional<ProjectCoordinatorEntity> findByProjectIdAndUserId(UUID projectId, UUID userId);
 
+    Optional<ProjectCoordinatorEntity> findByProjectIdAndPrimaryTrue(UUID projectId);
+
     boolean existsByProjectIdAndPrimaryTrue(UUID projectId);
 }

@@ -1,6 +1,7 @@
 package com.company.casehub.execution.entity;
 
 import com.company.casehub.common.BaseEntity;
+import com.company.casehub.customcase.entity.ProjectCustomTestCaseEntity;
 import com.company.casehub.testcase.entity.DecisionPointEntity;
 import com.company.casehub.testcase.entity.MasterTestCaseEntity;
 import com.company.casehub.testcase.entity.TransitionType;
@@ -34,4 +35,8 @@ public class BranchOutcomeEntity extends BaseEntity {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "target_master_test_case_id")
     private MasterTestCaseEntity targetMasterTestCase;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "target_custom_test_case_id")
+    private ProjectCustomTestCaseEntity targetCustomTestCase;
 }

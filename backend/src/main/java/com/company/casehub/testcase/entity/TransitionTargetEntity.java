@@ -1,6 +1,7 @@
 package com.company.casehub.testcase.entity;
 
 import com.company.casehub.common.BaseEntity;
+import com.company.casehub.customcase.entity.ProjectCustomTestCaseEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -27,6 +28,10 @@ public class TransitionTargetEntity extends BaseEntity {
     private int targetOrder;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "target_master_test_case_id", nullable = false)
+    @JoinColumn(name = "target_master_test_case_id")
     private MasterTestCaseEntity targetMasterTestCase;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "target_custom_test_case_id")
+    private ProjectCustomTestCaseEntity targetCustomTestCase;
 }

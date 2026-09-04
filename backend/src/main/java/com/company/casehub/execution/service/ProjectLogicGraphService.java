@@ -48,8 +48,9 @@ public class ProjectLogicGraphService {
     }
 
     private ProjectLogicGraphResponse.Node node(ProjectTestCaseEntity c) {
-        return new ProjectLogicGraphResponse.Node(c.getId(), c.getMasterTestCase().getId(), c.getMasterTestCase().getCaseCode(),
-                c.getTestCaseVersion().getId(), c.getExecutionStatus(), c.getRelationStatus(), c.isRoot(),
+        return new ProjectLogicGraphResponse.Node(c.getId(), c.getMasterTestCase() == null ? null : c.getMasterTestCase().getId(),
+                c.getCustomTestCase() == null ? null : c.getCustomTestCase().getId(), c.getMasterTestCase() != null ? c.getMasterTestCase().getCaseCode() : c.getCustomTestCase().getCaseCode(),
+                c.getTestCaseVersion() == null ? null : c.getTestCaseVersion().getId(), c.getExecutionStatus(), c.getRelationStatus(), c.isRoot(),
                 assigneeRepository.findByProjectTestCaseId(c.getId()).stream().map(a -> a.getUser().getDisplayName()).toList());
     }
 }

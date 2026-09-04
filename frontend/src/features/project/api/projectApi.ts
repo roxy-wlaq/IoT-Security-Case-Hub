@@ -1,6 +1,16 @@
 import { httpClient } from '@/shared/api/httpClient';
 import type { GenerationRun, GenerationRunMode, GenerationRule, Project, ProjectCapability, ProjectSummary, ProjectTestCase } from '@/shared/types/project';
 
+export type CapabilityRequestStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
+export type ChangeRequestStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
+export interface CustomStep { id?: string; sequenceNo: number; title?: string; content: string }
+export interface CustomDecisionPoint { id?: string; displayOrder: number; name: string; description?: string; transitionType?: string; targetMasterTestCaseIds?: string[]; targetCustomTestCaseIds?: string[]; targets?: { masterTestCaseId?: string; customTestCaseId?: string }[] }
+export interface CustomTestCase { id: string; projectId: string; caseCode: string; caseName: string; testPurpose?: string; preconditions?: string; selectionMode: 'SINGLE' | 'MULTIPLE'; evidenceRequired: boolean; evidenceRequirement?: string; remarkRequirement?: string; projectTestCaseId?: string; createdBy: string; steps: CustomStep[]; decisionPoints: CustomDecisionPoint[]; createdAt: string; updatedAt: string }
+export interface CapabilityUpdateRequest { id: string; projectId: string; capabilityId: string; currentValue: string; proposedValue: string; reason: string; evidenceReference?: string; submittedBy: string; reviewedBy?: string; status: CapabilityRequestStatus; createdAt: string; updatedAt: string }
+export interface TestCaseChangeRequest { id: string; masterTestCaseId: string; sourceVersionId: string; reason: string; submittedBy: string; reviewedBy?: string; revisionDraftVersionId?: string; status: ChangeRequestStatus; createdAt: string; updatedAt: string }
+export interface VersionAvailability { projectTestCaseId: string; masterTestCaseId?: string; boundVersionId?: string; currentPublishedVersionId?: string; newVersionAvailable: boolean; executionStatus: string; diff: { changedFields: string[]; logicChanged: boolean; compatible: boolean; warning?: string } }
+export interface VersionUpgradeResult { projectTestCaseId: string; previousVersionId?: string; currentVersionId?: string; upgraded: boolean; diff: VersionAvailability['diff'] }
+
 export async function listProjects(): Promise<ProjectSummary[]> { return (await httpClient.get<ProjectSummary[]>('/projects')).data; }
 export async function getProject(id: string): Promise<Project> { return (await httpClient.get<Project>(`/projects/${id}`)).data; }
 export async function createProject(payload: { projectName: string; deviceName: string; generationMode?: string; standardTaskTypeIds: string[] }): Promise<Project> {
@@ -23,3 +33,17 @@ export async function addProjectTestCase(projectId: string, masterTestCaseId: st
 export async function removeProjectTestCase(projectId: string, id: string): Promise<ProjectTestCase> { return (await httpClient.post<ProjectTestCase>(`/projects/${projectId}/test-plan/${id}/remove`)).data; }
 export async function restoreProjectTestCase(projectId: string, id: string): Promise<ProjectTestCase> { return (await httpClient.post<ProjectTestCase>(`/projects/${projectId}/test-plan/${id}/restore`)).data; }
 export async function assignProjectTestCase(projectId: string, id: string, userId: string): Promise<ProjectTestCase> { return (await httpClient.post<ProjectTestCase>(`/projects/${projectId}/test-plan/${id}/assignees`, { userId })).data; }
+export async function listCustomTestCases(projectId: string): Promise<CustomTestCase[]> { return (await httpClient.get<CustomTestCase[]>(`/projects/${projectId}/custom-test-cases`)).data; }
+export async function createCustomTestCase(projectId: string, payload: Record<string, unknown>): Promise<CustomTestCase> { return (await httpClient.post<CustomTestCase>(`/projects/${projectId}/custom-test-cases`, payload)).data; }
+export async function updateCustomTestCase(projectId: string, id: string, payload: Record<string, unknown>): Promise<CustomTestCase> { return (await httpClient.put<CustomTestCase>(`/projects/${projectId}/custom-test-cases/${id}`, payload)).data; }
+export async function assignCustomTestCase(projectId: string, id: string, userId: string): Promise<void> { await httpClient.post(`/projects/${projectId}/custom-test-cases/${id}/assignees/${userId}`); }
+export async function submitCustomTestCaseToLibrary(projectId: string, id: string): Promise<{ masterTestCaseId: string; draftVersionId: string; contributorId?: string }> { return (await httpClient.post(`/projects/${projectId}/custom-test-cases/${id}/submit-to-library`)).data; }
+export async function listCapabilityUpdateRequests(projectId: string): Promise<CapabilityUpdateRequest[]> { return (await httpClient.get<CapabilityUpdateRequest[]>(`/projects/${projectId}/capability-update-requests`)).data; }
+export async function submitCapabilityUpdateRequest(projectId: string, capabilityId: string, payload: { proposedValue: string; reason: string; evidenceReference?: string }): Promise<CapabilityUpdateRequest> { return (await httpClient.post<CapabilityUpdateRequest>(`/projects/${projectId}/capability-update-requests/${capabilityId}`, payload)).data; }
+export async function reviewCapabilityUpdateRequest(projectId: string, id: string, approved: boolean, comment?: string): Promise<CapabilityUpdateRequest> { return (await httpClient.post<CapabilityUpdateRequest>(`/projects/${projectId}/capability-update-requests/${id}/${approved ? 'approve' : 'reject'}`, { comment })).data; }
+export async function listTestCaseChangeRequests(masterId: string): Promise<TestCaseChangeRequest[]> { return (await httpClient.get<TestCaseChangeRequest[]>(`/test-cases/${masterId}/change-requests`)).data; }
+export async function submitTestCaseChangeRequest(masterId: string, payload: { sourceVersionId: string; reason: string }): Promise<TestCaseChangeRequest> { return (await httpClient.post<TestCaseChangeRequest>(`/test-cases/${masterId}/change-requests`, payload)).data; }
+export async function reviewTestCaseChangeRequest(masterId: string, id: string, approved: boolean, comment?: string): Promise<TestCaseChangeRequest> { return (await httpClient.post<TestCaseChangeRequest>(`/test-cases/${masterId}/change-requests/${id}/${approved ? 'approve' : 'reject'}`, { comment })).data; }
+export async function getVersionAvailability(projectTestCaseId: string): Promise<VersionAvailability> { return (await httpClient.get<VersionAvailability>(`/project-test-cases/${projectTestCaseId}/version`)).data; }
+export async function keepProjectTestCaseVersion(projectTestCaseId: string): Promise<VersionUpgradeResult> { return (await httpClient.post<VersionUpgradeResult>(`/project-test-cases/${projectTestCaseId}/version/keep`)).data; }
+export async function upgradeProjectTestCaseVersion(projectTestCaseId: string): Promise<VersionUpgradeResult> { return (await httpClient.post<VersionUpgradeResult>(`/project-test-cases/${projectTestCaseId}/version/upgrade`)).data; }
