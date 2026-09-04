@@ -58,7 +58,16 @@ public class TestCaseChangeRequestService {
     @Transactional(readOnly = true)
     public List<TestCaseChangeRequestResponse> list(UUID masterId, UserPrincipal principal) {
         var master = masterRepository.findById(masterId).orElseThrow(() -> new ResourceNotFoundException(ErrorCode.TEST_CASE_NOT_FOUND, "Test case not found"));
-        if (!accessPolicy.isVersionVisible(master, master.getVersions().stream().filter(v -> v.getStatus() == TestCaseVersionStatus.PUBLISHED).findFirst().orElseThrow(), principal)) throw new ForbiddenOperationException(ErrorCode.CHANGE_REQUEST_REVIEW_FORBIDDEN, "You cannot view these requests");
+        // A Change Request is always bound to a version that has been published, so a Master
+        // without one (a fresh Draft, which is what Submit-to-Library produces, or a Master whose
+        // only Published version was later deprecated) simply has nothing to list. Returning an
+        // empty list here keeps the endpoint deterministic instead of letting a missing version
+        // escape as an unmapped NoSuchElementException (HTTP 500).
+        var published = master.getVersions().stream()
+                .filter(v -> v.getStatus() == TestCaseVersionStatus.PUBLISHED || v.getStatus() == TestCaseVersionStatus.DEPRECATED)
+                .findFirst();
+        if (published.isEmpty()) return List.of();
+        if (!accessPolicy.isVersionVisible(master, published.get(), principal)) throw new ForbiddenOperationException(ErrorCode.CHANGE_REQUEST_REVIEW_FORBIDDEN, "You cannot view these requests");
         return requestRepository.findByMasterTestCaseIdOrderByCreatedAtDesc(masterId).stream().map(this::response).toList();
     }
 
