@@ -36,6 +36,7 @@ public class BootstrapUserService implements ApplicationRunner {
     private final RoleRepository roleRepository;
     private final UserRoleRepository userRoleRepository;
     private final PasswordEncoder passwordEncoder;
+    private final com.company.casehub.audit.service.AuditService auditService;
 
     @Value("${casehub.bootstrap.admin-username:admin}")
     private String adminUsername;
@@ -66,6 +67,11 @@ public class BootstrapUserService implements ApplicationRunner {
         admin.setMustChangePassword(false);
         userRepository.save(admin);
         userRoleRepository.save(new UserRoleEntity(admin, adminRole));
+        // Phase 26: bootstrap ADMIN creation is the single authoritative role
+        // mutation point in V1, so the frozen ROLE_CHANGE event is emitted here.
+        auditService.record(com.company.casehub.audit.entity.AuditAction.ROLE_CHANGE,
+                admin.getId(), admin.getUsername(), "USER", admin.getId().toString(), admin.getUsername(),
+                java.util.Map.of("role", "ADMIN", "bootstrap", true));
         log.info("Initial ADMIN user '{}' created (must_change_password=false).", adminUsername);
     }
 }

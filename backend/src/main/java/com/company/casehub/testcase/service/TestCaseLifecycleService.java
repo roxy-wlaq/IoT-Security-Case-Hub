@@ -1,6 +1,9 @@
 package com.company.casehub.testcase.service;
 
 import com.company.casehub.auth.security.UserPrincipal;
+import com.company.casehub.audit.entity.AuditAction;
+import com.company.casehub.audit.entity.AuditResourceType;
+import com.company.casehub.audit.service.AuditService;
 import com.company.casehub.common.exception.BusinessRuleException;
 import com.company.casehub.common.exception.ConflictException;
 import com.company.casehub.common.exception.ErrorCode;
@@ -37,6 +40,7 @@ import com.company.casehub.user.repository.UserRepository;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
@@ -79,13 +83,15 @@ public class TestCaseLifecycleService {
     private final TestCaseAccessPolicy accessPolicy;
     private final TestCaseQueryService queryService;
     private final DagValidationService dagValidationService;
+    private final AuditService auditService;
 
     public TestCaseLifecycleService(MasterTestCaseRepository masterRepository, TestCaseVersionRepository versionRepository,
                                     TestCaseReviewRecordRepository reviewRecordRepository,
                                     RevisionContributorRepository contributorRepository, TestStepRepository stepRepository,
                                     TestCaseToolRepository toolRepository, TestCaseStandardMappingRepository mappingRepository,
                                     UserRepository userRepository, TestCaseAccessPolicy accessPolicy,
-                                    TestCaseQueryService queryService, DagValidationService dagValidationService) {
+                                    TestCaseQueryService queryService, DagValidationService dagValidationService,
+                                    AuditService auditService) {
         this.masterRepository = masterRepository;
         this.versionRepository = versionRepository;
         this.reviewRecordRepository = reviewRecordRepository;
@@ -97,6 +103,7 @@ public class TestCaseLifecycleService {
         this.accessPolicy = accessPolicy;
         this.queryService = queryService;
         this.dagValidationService = dagValidationService;
+        this.auditService = auditService;
     }
 
     // -------------------------------------------------------------------------
@@ -144,6 +151,9 @@ public class TestCaseLifecycleService {
                 .forEach(v -> v.setCurrentVersion(false));
         versionRepository.save(target);
         record(target, ReviewRecordAction.PUBLISH, principal, request.comment());
+        auditService.record(AuditAction.TEST_CASE_PUBLISH, principal, AuditResourceType.TEST_CASE_VERSION,
+                target.getId(), master.getCaseCode(), Map.of("versionMajor", target.getVersionMajor(),
+                        "versionMinor", target.getVersionMinor()));
         return queryService.detail(masterId, principal);
     }
 
@@ -203,6 +213,9 @@ public class TestCaseLifecycleService {
         target.setRevisionClosed(true);
         versionRepository.save(target);
         record(target, ReviewRecordAction.DEPRECATE, principal, request.comment());
+        auditService.record(AuditAction.TEST_CASE_DEPRECATE, principal, AuditResourceType.TEST_CASE_VERSION,
+                target.getId(), master.getCaseCode(), Map.of("versionMajor", target.getVersionMajor(),
+                        "versionMinor", target.getVersionMinor()));
         return queryService.detail(masterId, principal);
     }
 

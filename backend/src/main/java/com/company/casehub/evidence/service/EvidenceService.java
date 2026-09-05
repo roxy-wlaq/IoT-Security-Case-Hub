@@ -1,5 +1,8 @@
 package com.company.casehub.evidence.service;
 
+import com.company.casehub.audit.entity.AuditAction;
+import com.company.casehub.audit.entity.AuditResourceType;
+import com.company.casehub.audit.service.AuditService;
 import com.company.casehub.auth.security.UserPrincipal;
 import com.company.casehub.common.exception.ErrorCode;
 import com.company.casehub.common.exception.ForbiddenOperationException;
@@ -17,8 +20,10 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -30,16 +35,25 @@ public class EvidenceService {
     private final UserRepository userRepository;
     private final StorageService storage;
     private final ProjectAccessPolicy accessPolicy;
+    private final AuditService auditService;
 
     public EvidenceService(EvidenceRepository evidenceRepository, ProjectTestCaseRepository testCaseRepository,
                            ProjectTestCaseAssigneeRepository assigneeRepository, UserRepository userRepository,
                            StorageService storage, ProjectAccessPolicy accessPolicy) {
+        this(evidenceRepository, testCaseRepository, assigneeRepository, userRepository, storage, accessPolicy, null);
+    }
+
+    @Autowired
+    public EvidenceService(EvidenceRepository evidenceRepository, ProjectTestCaseRepository testCaseRepository,
+                           ProjectTestCaseAssigneeRepository assigneeRepository, UserRepository userRepository,
+                           StorageService storage, ProjectAccessPolicy accessPolicy, AuditService auditService) {
         this.evidenceRepository = evidenceRepository;
         this.testCaseRepository = testCaseRepository;
         this.assigneeRepository = assigneeRepository;
         this.userRepository = userRepository;
         this.storage = storage;
         this.accessPolicy = accessPolicy;
+        this.auditService = auditService;
     }
 
     @Transactional(readOnly = true)
@@ -106,6 +120,10 @@ public class EvidenceService {
             evidenceRepository.delete(entity);
             evidenceRepository.flush();
             try { storage.delete(trashKey); } catch (IOException ignored) { }
+            if (auditService != null) {
+                auditService.record(AuditAction.EVIDENCE_DELETE, principal, AuditResourceType.EVIDENCE,
+                        entity.getId(), entity.getOriginalFilename(), Map.of("fileSize", entity.getFileSize()));
+            }
         } catch (IOException | RuntimeException ex) {
             try {
                 if (storage.resolve(trashKey).toFile().exists()) storage.move(trashKey, entity.getStorageKey());

@@ -40,6 +40,7 @@ public class ProjectService {
     private final StandardTaskTypeRepository standardTaskTypeRepository;
     private final ProjectAccessPolicy accessPolicy;
     private final UserRoleRepository userRoleRepository;
+    private final com.company.casehub.audit.service.AuditService auditService;
 
     public ProjectService(ProjectRepository projectRepository,
                            ProjectCoordinatorRepository coordinatorRepository,
@@ -47,7 +48,8 @@ public class ProjectService {
                            UserRepository userRepository,
                            StandardTaskTypeRepository standardTaskTypeRepository,
                            ProjectAccessPolicy accessPolicy,
-                           UserRoleRepository userRoleRepository) {
+                           UserRoleRepository userRoleRepository,
+                           com.company.casehub.audit.service.AuditService auditService) {
         this.projectRepository = projectRepository;
         this.coordinatorRepository = coordinatorRepository;
         this.standardRepository = standardRepository;
@@ -55,6 +57,7 @@ public class ProjectService {
         this.standardTaskTypeRepository = standardTaskTypeRepository;
         this.accessPolicy = accessPolicy;
         this.userRoleRepository = userRoleRepository;
+        this.auditService = auditService;
     }
 
     @Transactional
@@ -77,6 +80,11 @@ public class ProjectService {
         project = projectRepository.save(project);
         replaceStandards(project, standards);
         replacePrimaryCoordinator(project, coordinator);
+        auditService.record(com.company.casehub.audit.entity.AuditAction.PROJECT_CREATE, principal,
+                com.company.casehub.audit.entity.AuditResourceType.PROJECT, project.getId(),
+                project.getProjectNumber(), java.util.Map.of(
+                        "projectName", project.getProjectName(),
+                        "generationMode", project.getGenerationMode().name()));
         return toResponse(project);
     }
 
@@ -119,8 +127,16 @@ public class ProjectService {
     public ProjectResponse changeStatus(UUID projectId, ProjectStatus status, UserPrincipal principal) {
         accessPolicy.requireManage(projectId, principal);
         ProjectEntity project = requireProject(projectId);
+        ProjectStatus previous = project.getStatus();
         project.setStatus(status);
-        return toResponse(projectRepository.save(project));
+        ProjectResponse response = toResponse(projectRepository.save(project));
+        if (status == ProjectStatus.ARCHIVED && previous != ProjectStatus.ARCHIVED) {
+            auditService.record(com.company.casehub.audit.entity.AuditAction.PROJECT_ARCHIVE, principal,
+                    com.company.casehub.audit.entity.AuditResourceType.PROJECT, project.getId(),
+                    project.getProjectNumber(), java.util.Map.of(
+                            "fromStatus", previous.name(), "toStatus", status.name()));
+        }
+        return response;
     }
 
     private ProjectEntity requireProject(UUID projectId) {

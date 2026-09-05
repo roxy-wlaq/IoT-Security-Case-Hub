@@ -1,5 +1,9 @@
 package com.company.casehub.capability.service;
 
+import com.company.casehub.audit.entity.AuditAction;
+import com.company.casehub.audit.entity.AuditResourceType;
+import com.company.casehub.audit.service.AuditService;
+import com.company.casehub.auth.security.UserPrincipal;
 import com.company.casehub.capability.dto.CapabilityResponse;
 import com.company.casehub.capability.dto.CapabilityTreeNode;
 import com.company.casehub.capability.dto.CreateCapabilityRequest;
@@ -14,10 +18,10 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import lombok.RequiredArgsConstructor;
+import java.util.Map;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -34,13 +38,23 @@ import org.springframework.transaction.annotation.Transactional;
  * (it spans an unbounded number of rows), so it is enforced here.
  */
 @Service
-@RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class CapabilityService {
 
     private static final Logger log = LoggerFactory.getLogger(CapabilityService.class);
 
     private final CapabilityRepository capabilityRepository;
+    private final AuditService auditService;
+
+    public CapabilityService(CapabilityRepository capabilityRepository) {
+        this(capabilityRepository, null);
+    }
+
+    @Autowired
+    public CapabilityService(CapabilityRepository capabilityRepository, AuditService auditService) {
+        this.capabilityRepository = capabilityRepository;
+        this.auditService = auditService;
+    }
 
     /**
      * {@code GET /api/v1/capabilities/tree} — the whole tree, nested.
@@ -98,7 +112,9 @@ public class CapabilityService {
                 normalizeDescription(request.description()),
                 sortOrderOrDefault(request.sortOrder()));
 
-        return CapabilityResponse.of(capabilityRepository.save(entity));
+        CapabilityResponse response = CapabilityResponse.of(capabilityRepository.save(entity));
+        auditCapabilityUpdate(entity, "CREATE");
+        return response;
     }
 
     /**
@@ -126,7 +142,9 @@ public class CapabilityService {
         entity.setDescription(normalizeDescription(request.description()));
         entity.setSortOrder(sortOrderOrDefault(request.sortOrder()));
 
-        return CapabilityResponse.of(capabilityRepository.save(entity));
+        CapabilityResponse response = CapabilityResponse.of(capabilityRepository.save(entity));
+        auditCapabilityUpdate(entity, "UPDATE");
+        return response;
     }
 
     /** {@code POST /api/v1/capabilities/{id}/enable}. */
@@ -149,7 +167,17 @@ public class CapabilityService {
     private CapabilityResponse setEnabled(UUID capabilityId, boolean enabled) {
         CapabilityEntity entity = requireCapability(capabilityId);
         entity.setEnabled(enabled);
-        return CapabilityResponse.of(capabilityRepository.save(entity));
+        CapabilityResponse response = CapabilityResponse.of(capabilityRepository.save(entity));
+        auditCapabilityUpdate(entity, enabled ? "ENABLE" : "DISABLE");
+        return response;
+    }
+
+    private void auditCapabilityUpdate(CapabilityEntity entity, String mutation) {
+        UserPrincipal actor = AuditService.currentActor();
+        if (auditService != null && actor != null) {
+            auditService.record(AuditAction.CAPABILITY_LIBRARY_UPDATE, actor, AuditResourceType.CAPABILITY,
+                    entity.getId(), entity.getCode(), Map.of("mutation", mutation, "enabled", entity.isEnabled()));
+        }
     }
 
     /**

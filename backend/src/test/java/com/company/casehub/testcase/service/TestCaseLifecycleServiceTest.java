@@ -3,13 +3,17 @@ package com.company.casehub.testcase.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
 import com.company.casehub.auth.security.UserPrincipal;
+import com.company.casehub.audit.entity.AuditAction;
+import com.company.casehub.audit.service.AuditService;
 import com.company.casehub.common.exception.BusinessRuleException;
 import com.company.casehub.common.exception.ConflictException;
 import com.company.casehub.common.exception.ErrorCode;
@@ -70,6 +74,7 @@ class TestCaseLifecycleServiceTest {
     @Mock private TestCaseAccessPolicy accessPolicy;
     @Mock private TestCaseQueryService queryService;
     @Mock private DagValidationService dagValidationService;
+    @Mock private AuditService auditService;
 
     @InjectMocks private TestCaseLifecycleService service;
 
@@ -193,7 +198,8 @@ class TestCaseLifecycleServiceTest {
         when(accessPolicy.isAdmin(any())).thenReturn(true);
         when(userRepository.findById(owner.getId())).thenReturn(Optional.of(owner));
 
-        service.publish(masterId, review.getId(), new LifecycleActionRequest("approved"), principal(owner.getId()));
+        UserPrincipal actor = principal(owner.getId());
+        service.publish(masterId, review.getId(), new LifecycleActionRequest("approved"), actor);
 
         assertThat(review.getStatus()).isEqualTo(TestCaseVersionStatus.PUBLISHED);
         assertThat(review.isCurrentVersion()).isTrue();
@@ -201,6 +207,8 @@ class TestCaseLifecycleServiceTest {
         assertThat(review.isRevisionClosed()).isTrue();
         assertThat(review.getPublishedAt()).isNotNull();
         verifyRecord(ReviewRecordAction.PUBLISH);
+        verify(auditService).record(eq(AuditAction.TEST_CASE_PUBLISH), eq(actor), eq("TEST_CASE_VERSION"),
+                eq(review.getId()), isNull(String.class), anyMap());
     }
 
     @Test
@@ -334,13 +342,16 @@ class TestCaseLifecycleServiceTest {
         when(accessPolicy.isAdmin(any())).thenReturn(true);
         when(userRepository.findById(owner.getId())).thenReturn(Optional.of(owner));
 
-        service.deprecate(masterId, published.getId(), new LifecycleActionRequest("obsolete"), principal(owner.getId()));
+        UserPrincipal actor = principal(owner.getId());
+        service.deprecate(masterId, published.getId(), new LifecycleActionRequest("obsolete"), actor);
 
         assertThat(published.getStatus()).isEqualTo(TestCaseVersionStatus.DEPRECATED);
         assertThat(published.isCurrentVersion()).isFalse();
         assertThat(published.getDeprecatedAt()).isNotNull();
         assertThat(published.isRevisionClosed()).isTrue();
         verifyRecord(ReviewRecordAction.DEPRECATE);
+        verify(auditService).record(eq(AuditAction.TEST_CASE_DEPRECATE), eq(actor), eq("TEST_CASE_VERSION"),
+                eq(published.getId()), isNull(String.class), anyMap());
     }
 
     @Test

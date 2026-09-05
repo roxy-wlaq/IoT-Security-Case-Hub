@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
+import static org.mockito.ArgumentMatchers.anyMap;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -17,6 +19,9 @@ import com.company.casehub.capability.dto.UpdateCapabilityRequest;
 import com.company.casehub.capability.entity.CapabilityEntity;
 import com.company.casehub.capability.repository.CapabilityRepository;
 import com.company.casehub.capability.service.CapabilityService;
+import com.company.casehub.audit.entity.AuditAction;
+import com.company.casehub.audit.service.AuditService;
+import com.company.casehub.auth.security.UserPrincipal;
 import com.company.casehub.common.exception.BusinessRuleException;
 import com.company.casehub.common.exception.CaseHubException;
 import com.company.casehub.common.exception.ConflictException;
@@ -26,12 +31,15 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 /**
  * Unit tests for the Capability Library. Pure JUnit 5 + Mockito: no Spring context and
@@ -51,15 +59,27 @@ class CapabilityServiceTest {
     @Mock
     private CapabilityRepository capabilityRepository;
 
+    @Mock
+    private AuditService auditService;
+
     private CapabilityService capabilityService;
 
     @BeforeEach
     void setUp() {
-        capabilityService = new CapabilityService(capabilityRepository);
+        capabilityService = new CapabilityService(capabilityRepository, auditService);
+        UserPrincipal actor = new UserPrincipal(UUID.randomUUID(), "admin", "hash", "Admin", true, false,
+                java.util.Set.of("ADMIN"), java.util.Set.of("capability:manage_library"));
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(actor, null, actor.getAuthorities()));
         // The service mutates the entity and reads the save() result; in the slice under
         // test save() is a no-op that hands the same instance back.
         lenient().when(capabilityRepository.save(any(CapabilityEntity.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
+    }
+
+    @AfterEach
+    void clearSecurityContext() {
+        SecurityContextHolder.clearContext();
     }
 
     // ---------------------------------------------------------------- create
@@ -84,6 +104,8 @@ class CapabilityServiceTest {
         assertThat(saved.getValue().getParentId()).isNull();
         // A root create has nothing to look up.
         verify(capabilityRepository, never()).findById(any());
+        verify(auditService).record(eq(AuditAction.CAPABILITY_LIBRARY_UPDATE), any(UserPrincipal.class),
+                eq("CAPABILITY"), eq(response.id()), any(String.class), anyMap());
     }
 
     @Test

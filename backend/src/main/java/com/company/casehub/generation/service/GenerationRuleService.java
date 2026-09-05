@@ -1,6 +1,9 @@
 package com.company.casehub.generation.service;
 
 import com.company.casehub.auth.security.UserPrincipal;
+import com.company.casehub.audit.entity.AuditAction;
+import com.company.casehub.audit.entity.AuditResourceType;
+import com.company.casehub.audit.service.AuditService;
 import com.company.casehub.capability.repository.CapabilityRepository;
 import com.company.casehub.common.exception.ConflictException;
 import com.company.casehub.common.exception.ErrorCode;
@@ -25,6 +28,7 @@ import com.company.casehub.user.repository.UserRepository;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
@@ -38,17 +42,20 @@ public class GenerationRuleService {
     private final StandardTaskTypeRepository standardRepository;
     private final MasterTestCaseRepository masterRepository;
     private final UserRepository userRepository;
+    private final AuditService auditService;
 
     public GenerationRuleService(GenerationRuleRepository ruleRepository,
                                  CapabilityRepository capabilityRepository,
                                  StandardTaskTypeRepository standardRepository,
                                  MasterTestCaseRepository masterRepository,
-                                 UserRepository userRepository) {
+                                 UserRepository userRepository,
+                                 AuditService auditService) {
         this.ruleRepository = ruleRepository;
         this.capabilityRepository = capabilityRepository;
         this.standardRepository = standardRepository;
         this.masterRepository = masterRepository;
         this.userRepository = userRepository;
+        this.auditService = auditService;
     }
 
     @Transactional(readOnly = true)
@@ -94,7 +101,10 @@ public class GenerationRuleService {
         rule.getGroups().clear();
         rule.getOutputs().clear();
         applyGraph(rule, request);
-        return toResponse(ruleRepository.save(rule));
+        GenerationRuleResponse response = toResponse(ruleRepository.save(rule));
+        auditService.record(AuditAction.GENERATION_RULE_UPDATE, principal, AuditResourceType.GENERATION_RULE,
+                rule.getId(), rule.getRuleCode(), Map.of("status", rule.getStatus().name(), "mode", rule.getMode().name()));
+        return response;
     }
 
     private void applyGraph(GenerationRuleEntity rule, GenerationRuleRequest request) {

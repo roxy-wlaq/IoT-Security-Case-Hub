@@ -2,6 +2,7 @@ package com.company.casehub.evidence;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.startsWith;
 import static org.mockito.Mockito.doThrow;
@@ -9,6 +10,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.company.casehub.auth.security.UserPrincipal;
+import com.company.casehub.audit.entity.AuditAction;
+import com.company.casehub.audit.service.AuditService;
 import com.company.casehub.common.exception.ForbiddenOperationException;
 import com.company.casehub.common.exception.ResourceNotFoundException;
 import com.company.casehub.evidence.entity.EvidenceEntity;
@@ -41,6 +44,7 @@ class EvidenceServiceAuthorizationTest {
     @Mock private UserRepository userRepository;
     @Mock private StorageService storage;
     @Mock private ProjectAccessPolicy accessPolicy;
+    @Mock private AuditService auditService;
     @TempDir Path tempDir;
     private EvidenceService service;
     private UserPrincipal tester;
@@ -48,7 +52,8 @@ class EvidenceServiceAuthorizationTest {
 
     @BeforeEach
     void setUp() {
-        service = new EvidenceService(evidenceRepository, testCaseRepository, assigneeRepository, userRepository, storage, accessPolicy);
+        service = new EvidenceService(evidenceRepository, testCaseRepository, assigneeRepository, userRepository,
+                storage, accessPolicy, auditService);
         UUID userId = UUID.randomUUID();
         tester = new UserPrincipal(userId, "tester", "hash", "Tester", true, false, Set.of("TESTER"), Set.of("evidence:read"));
         ProjectEntity project = new ProjectEntity(); project.setId(UUID.randomUUID());
@@ -83,6 +88,25 @@ class EvidenceServiceAuthorizationTest {
 
         assertThatThrownBy(() -> service.delete(evidenceId, tester)).isInstanceOf(IllegalStateException.class);
         verify(storage).move(eq("final/evidence/original.bin"), startsWith("trash/evidence/"));
+    }
+
+    @Test
+    void successfulDeleteEmitsOneEvidenceAuditEvent() {
+        UUID evidenceId = UUID.randomUUID();
+        EvidenceEntity evidence = new EvidenceEntity();
+        evidence.setId(evidenceId);
+        evidence.setProjectTestCase(ptc);
+        evidence.setStorageKey("final/evidence/original.bin");
+        evidence.setOriginalFilename("report.txt");
+        evidence.setFileSize(12L);
+        when(evidenceRepository.findById(evidenceId)).thenReturn(Optional.of(evidence));
+        when(testCaseRepository.findById(ptc.getId())).thenReturn(Optional.of(ptc));
+        when(assigneeRepository.existsByProjectTestCaseIdAndUserId(ptc.getId(), tester.getId())).thenReturn(true);
+
+        service.delete(evidenceId, tester);
+
+        verify(auditService).record(eq(AuditAction.EVIDENCE_DELETE), eq(tester), eq("EVIDENCE"),
+                eq(evidenceId), eq("report.txt"), anyMap());
     }
 
     @Test

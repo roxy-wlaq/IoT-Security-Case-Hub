@@ -51,6 +51,7 @@ public class AuthenticationService {
     private final UserDetailsServiceImpl userDetailsService;
     private final SessionAuthenticationStrategy sessionAuthenticationStrategy;
     private final SessionRegistry sessionRegistry;
+    private final com.company.casehub.audit.service.AuditService auditService;
 
     public CurrentUserResponse login(LoginRequest request, HttpServletRequest httpRequest,
                                      HttpServletResponse httpResponse) {
@@ -65,9 +66,11 @@ public class AuthenticationService {
             authentication = authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(request.username(), request.password()));
         } catch (DisabledException e) {
+            recordLoginFailureSafely(request.username(), ip, "USER_DISABLED");
             throw new CaseHubException(ErrorCode.USER_DISABLED);
         } catch (AuthenticationException e) {
             loginAttemptService.recordFailure(key);
+            recordLoginFailureSafely(request.username(), ip, "INVALID_CREDENTIALS");
             throw new CaseHubException(ErrorCode.AUTH_INVALID_CREDENTIALS);
         }
 
@@ -91,6 +94,7 @@ public class AuthenticationService {
         securityContextRepository.saveContext(context, httpRequest, httpResponse);
 
         log.info("Login success user={} ip={}", principal.getUsername(), ip);
+        recordLoginSuccessSafely(principal, ip);
         return toResponse(principal);
     }
 
@@ -142,6 +146,27 @@ public class AuthenticationService {
                 principal.isMustChangePassword(),
                 List.copyOf(principal.getRoles()),
                 List.copyOf(principal.getPermissions()));
+    }
+
+    /**
+     * Audit is governance, not an authentication dependency: a failed audit
+     * write must never prevent a successful login. {@code AuditService} runs
+     * these in its own transaction (REQUIRES_NEW).
+     */
+    private void recordLoginSuccessSafely(UserPrincipal principal, String ip) {
+        try {
+            auditService.recordLoginSuccess(principal, ip);
+        } catch (RuntimeException ex) {
+            log.error("Login audit recording failed for user={}", principal.getUsername(), ex);
+        }
+    }
+
+    private void recordLoginFailureSafely(String username, String ip, String reason) {
+        try {
+            auditService.recordLoginFailure(username, ip, reason);
+        } catch (RuntimeException ex) {
+            log.error("Login failure audit recording failed for user={}", username, ex);
+        }
     }
 
     private UserPrincipal currentUserOrNull() {
