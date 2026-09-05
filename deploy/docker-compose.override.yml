@@ -15,9 +15,18 @@
 services:
 
   backend:
+    environment:
+      SPRING_PROFILES_ACTIVE: prod,http
     ports:
       - "${BACKEND_DEBUG_PORT:-8080}:8080"
 
   postgres:
     ports:
       - "${POSTGRES_DEBUG_PORT:-5432}:5432"
+
+  nginx:
+    # Development override keeps plain HTTP usable without a certificate.
+    volumes:
+      - ./nginx/conf.d/dev-http.conf:/etc/nginx/conf.d/casehub.conf:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost/healthz || exit 1"]

@@ -45,6 +45,10 @@ certs/*.pem
 .local-data/
 backups/
 logs/
+deploy/.env
+deploy/certs/
+deploy/backups/
+deploy/runtime/
 *.dump
 *.sql.gz
 *.log

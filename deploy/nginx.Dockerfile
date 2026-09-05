@@ -55,10 +55,10 @@ RUN mkdir -p /var/cache/nginx /var/log/nginx \
     && touch /var/run/nginx.pid \
     && chown nginx:nginx /var/run/nginx.pid
 
-EXPOSE 80
+EXPOSE 80 443
 
 # 健康检查：/healthz 由 deploy/nginx/conf.d/casehub.conf 提供，返回 200
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=5 \
-    CMD wget -qO- http://localhost/healthz || exit 1
+    CMD wget --no-check-certificate -qO- https://localhost/healthz || exit 1
 
 CMD ["nginx", "-g", "daemon off;"]
