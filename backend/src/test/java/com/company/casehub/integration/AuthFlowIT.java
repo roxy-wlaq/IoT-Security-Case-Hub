@@ -10,6 +10,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.company.casehub.user.entity.RoleEntity;
 import com.company.casehub.user.entity.UserEntity;
 import com.company.casehub.user.entity.UserRoleEntity;
+import com.company.casehub.audit.entity.AuditAction;
+import com.company.casehub.audit.repository.AuditRecordRepository;
 import com.company.casehub.user.repository.RoleRepository;
 import com.company.casehub.user.repository.UserRepository;
 import com.company.casehub.user.repository.UserRoleRepository;
@@ -44,6 +46,9 @@ class AuthFlowIT extends AbstractIntegrationTest {
 
     @Autowired
     private UserRoleRepository userRoleRepository;
+
+    @Autowired
+    private AuditRecordRepository auditRecordRepository;
 
     @Autowired
     private PasswordEncoder passwordEncoder;
@@ -94,6 +99,9 @@ class AuthFlowIT extends AbstractIntegrationTest {
                         .content(objectMapper.writeValueAsString(Map.of("username", username, "password", "wrong-pass")))))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("AUTH_INVALID_CREDENTIALS"));
+        assertThat(auditRecordRepository.findAll().stream()
+                .filter(row -> row.getAction() == AuditAction.LOGIN_FAILURE)
+                .filter(row -> username.equals(row.getActorUsername()))).hasSize(1);
     }
 
     @Test
@@ -105,6 +113,10 @@ class AuthFlowIT extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.username").value(username))
                 .andExpect(jsonPath("$.roles").isArray())
                 .andExpect(jsonPath("$.permissions").isArray());
+
+        assertThat(auditRecordRepository.findAll().stream()
+                .filter(row -> row.getAction() == AuditAction.LOGIN)
+                .filter(row -> username.equals(row.getActorUsername()))).hasSize(1);
 
         // ADMIN seed must surface through the role_permissions mapping.
         mockMvc.perform(get("/api/v1/auth/me").session(session))

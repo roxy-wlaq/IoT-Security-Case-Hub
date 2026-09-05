@@ -4,8 +4,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.company.casehub.auth.security.UserPrincipal;
+import com.company.casehub.audit.entity.AuditAction;
+import com.company.casehub.audit.entity.AuditRecordEntity;
+import com.company.casehub.audit.repository.AuditRecordRepository;
+import com.company.casehub.capability.dto.CreateCapabilityRequest;
 import com.company.casehub.capability.entity.CapabilityEntity;
 import com.company.casehub.capability.repository.CapabilityRepository;
+import com.company.casehub.capability.service.CapabilityService;
 import com.company.casehub.category.entity.CategoryEntity;
 import com.company.casehub.category.repository.CategoryRepository;
 import com.company.casehub.change.dto.CapabilityUpdateRequestPayload;
@@ -40,10 +45,12 @@ import com.company.casehub.generation.dto.GenerationRuleRequest;
 import com.company.casehub.generation.entity.ConditionTargetType;
 import com.company.casehub.generation.entity.GenerationOperator;
 import com.company.casehub.generation.entity.GenerationRuleMode;
+import com.company.casehub.generation.entity.GenerationRuleEntity;
 import com.company.casehub.generation.entity.GenerationRuleStatus;
 import com.company.casehub.generation.entity.GenerationTriggerType;
 import com.company.casehub.generation.entity.GroupOperator;
 import com.company.casehub.generation.repository.GenerationRunRepository;
+import com.company.casehub.generation.repository.GenerationRuleRepository;
 import com.company.casehub.generation.service.GenerationRuleService;
 import com.company.casehub.generation.service.GenerationRuntimeService;
 import com.company.casehub.project.dto.ProjectCreateRequest;
@@ -86,6 +93,8 @@ import java.util.function.Supplier;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 /**
  * Independent QA verification for Batch 4 (Phase 21-24).
@@ -108,6 +117,7 @@ class Batch4QAVerificationIT extends AbstractIntegrationTest {
     @Autowired private TestCaseChangeRequestService changeRequestService;
     @Autowired private VersionUpgradeService versionUpgradeService;
     @Autowired private GenerationRuleService ruleService;
+    @Autowired private GenerationRuleRepository ruleRepository;
     @Autowired private GenerationRuntimeService runtimeService;
     @Autowired private ProjectTestCaseRepository ptcRepository;
     @Autowired private ProjectDecisionSelectionRepository selectionRepository;
@@ -122,6 +132,8 @@ class Batch4QAVerificationIT extends AbstractIntegrationTest {
     @Autowired private CategoryRepository categoryRepository;
     @Autowired private StandardTaskTypeRepository standardRepository;
     @Autowired private CapabilityRepository capabilityRepository;
+    @Autowired private CapabilityService capabilityLibraryService;
+    @Autowired private AuditRecordRepository auditRecordRepository;
     @Autowired private GenerationRunRepository generationRunRepository;
     @Autowired private ProjectTestCaseTriggerRepository triggerRepository;
 
@@ -247,6 +259,62 @@ class Batch4QAVerificationIT extends AbstractIntegrationTest {
         assertThat(planService.list(projectId, coordinatorPrincipal))
                 .noneMatch(p -> p.masterTestCaseId().equals(targetCase));
         assertThat(ptcRepository.findById(membershipPtc).orElseThrow().isRemoved()).isFalse();
+    }
+
+    @Test
+    void authoritativeBatch5MutationsEmitOneEventAndDeniedMutationEmitsNone() {
+        UUID projectId = createProject();
+        assertThat(auditRows(AuditAction.PROJECT_CREATE, projectId)).hasSize(1);
+
+        projectService.changeStatus(projectId, com.company.casehub.project.entity.ProjectStatus.ARCHIVED,
+                coordinatorPrincipal);
+        assertThat(auditRows(AuditAction.PROJECT_ARCHIVE, projectId)).hasSize(1);
+
+        UUID masterId = publishMaster("Q5-AUDIT", false);
+        UUID publishedVersionId = versionRepository.findByMasterTestCaseIdOrderByVersionMajorDescVersionMinorDesc(masterId)
+                .get(0).getId();
+        assertThat(auditRows(AuditAction.TEST_CASE_PUBLISH, publishedVersionId)).hasSize(1);
+
+        lifecycleService.deprecate(masterId, publishedVersionId, new LifecycleActionRequest("retire"), adminPrincipal);
+        assertThat(auditRows(AuditAction.TEST_CASE_DEPRECATE, publishedVersionId)).hasSize(1);
+
+        var ruleRequest = new GenerationRuleRequest(
+                "Q5-RULE-" + UUID.randomUUID().toString().substring(0, 8), "Audit rule", null,
+                GenerationRuleMode.FULL, GenerationRuleStatus.ENABLED,
+                List.of(new GenerationRuleRequest.GroupRequest(null, GroupOperator.AND, 0, List.of())),
+                List.of(masterId));
+        var ruleEntity = new GenerationRuleEntity();
+        ruleEntity.setRuleCode(ruleRequest.ruleCode());
+        ruleEntity.setName(ruleRequest.name());
+        ruleEntity.setDescription(ruleRequest.description());
+        ruleEntity.setMode(ruleRequest.mode());
+        ruleEntity.setStatus(ruleRequest.status());
+        ruleEntity.setCreatedBy(userRepository.findById(adminPrincipal.getId()).orElseThrow());
+        var rule = ruleRepository.saveAndFlush(ruleEntity);
+        ruleService.update(rule.getId(), ruleRequest, adminPrincipal);
+        assertThat(auditRows(AuditAction.GENERATION_RULE_UPDATE, rule.getId())).hasSize(1);
+
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
+                adminPrincipal, null, adminPrincipal.getAuthorities()));
+        try {
+            var capability = capabilityLibraryService.create(new CreateCapabilityRequest(
+                    null, "Q5-AUDIT-" + UUID.randomUUID().toString().substring(0, 8), "Audit capability", null, 0));
+            assertThat(auditRows(AuditAction.CAPABILITY_LIBRARY_UPDATE, capability.id())).hasSize(1);
+        } finally {
+            SecurityContextHolder.clearContext();
+        }
+
+        assertThatThrownBy(() -> lifecycleService.publish(masterId, publishedVersionId,
+                new LifecycleActionRequest("denied"), coordinatorPrincipal))
+                .isInstanceOf(ForbiddenOperationException.class);
+        assertThat(auditRows(AuditAction.TEST_CASE_PUBLISH, publishedVersionId)).hasSize(1);
+    }
+
+    private List<AuditRecordEntity> auditRows(AuditAction action, UUID resourceId) {
+        return auditRecordRepository.findAll().stream()
+                .filter(row -> row.getAction() == action)
+                .filter(row -> resourceId.toString().equals(row.getResourceId()))
+                .toList();
     }
 
     // ------------------------------------------------------------------

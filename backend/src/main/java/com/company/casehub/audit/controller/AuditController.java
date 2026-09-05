@@ -28,7 +28,7 @@ public class AuditController {
     }
 
     @GetMapping
-    @PreAuthorize("hasAuthority('audit:read')")
+    @PreAuthorize("hasAuthority('audit:read') and (hasRole('ADMIN') or (principal instanceof T(com.company.casehub.auth.security.UserPrincipal) and principal.roles.contains('ADMIN')))")
     public PagedResponse<AuditLogResponse> list(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,

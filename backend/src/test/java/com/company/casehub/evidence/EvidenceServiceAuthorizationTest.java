@@ -1,6 +1,7 @@
 package com.company.casehub.evidence;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.eq;
@@ -8,6 +9,7 @@ import static org.mockito.ArgumentMatchers.startsWith;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.never;
 
 import com.company.casehub.auth.security.UserPrincipal;
 import com.company.casehub.audit.entity.AuditAction;
@@ -35,6 +37,8 @@ import org.junit.jupiter.api.io.TempDir;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 @ExtendWith(MockitoExtension.class)
 class EvidenceServiceAuthorizationTest {
@@ -102,11 +106,88 @@ class EvidenceServiceAuthorizationTest {
         when(evidenceRepository.findById(evidenceId)).thenReturn(Optional.of(evidence));
         when(testCaseRepository.findById(ptc.getId())).thenReturn(Optional.of(ptc));
         when(assigneeRepository.existsByProjectTestCaseIdAndUserId(ptc.getId(), tester.getId())).thenReturn(true);
-
         service.delete(evidenceId, tester);
 
         verify(auditService).record(eq(AuditAction.EVIDENCE_DELETE), eq(tester), eq("EVIDENCE"),
                 eq(evidenceId), eq("report.txt"), anyMap());
+    }
+
+    @Test
+    void deleteDefersTrashCleanupUntilTransactionCommit() throws Exception {
+        UUID evidenceId = UUID.randomUUID();
+        EvidenceEntity evidence = evidence(evidenceId);
+        when(evidenceRepository.findById(evidenceId)).thenReturn(Optional.of(evidence));
+        when(testCaseRepository.findById(ptc.getId())).thenReturn(Optional.of(ptc));
+        when(assigneeRepository.existsByProjectTestCaseIdAndUserId(ptc.getId(), tester.getId())).thenReturn(true);
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            service.delete(evidenceId, tester);
+
+            verify(storage, never()).delete(startsWith("trash/evidence/"));
+            assertThat(TransactionSynchronizationManager.getSynchronizations()).hasSize(1);
+            TransactionSynchronization synchronization = TransactionSynchronizationManager.getSynchronizations().get(0);
+            synchronization.afterCommit();
+            verify(storage).delete(startsWith("trash/evidence/"));
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+    }
+
+    @Test
+    void deleteRestoresTrashObjectOnlyAfterTransactionRollback() throws Exception {
+        UUID evidenceId = UUID.randomUUID();
+        EvidenceEntity evidence = evidence(evidenceId);
+        when(evidenceRepository.findById(evidenceId)).thenReturn(Optional.of(evidence));
+        when(testCaseRepository.findById(ptc.getId())).thenReturn(Optional.of(ptc));
+        when(assigneeRepository.existsByProjectTestCaseIdAndUserId(ptc.getId(), tester.getId())).thenReturn(true);
+        when(storage.resolve(startsWith("trash/evidence/"))).thenReturn(tempDir.resolve("trash.bin"));
+        Files.createFile(tempDir.resolve("trash.bin"));
+
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            service.delete(evidenceId, tester);
+
+            verify(storage, never()).move(startsWith("trash/evidence/"), eq(evidence.getStorageKey()));
+            TransactionSynchronizationManager.getSynchronizations().get(0)
+                    .afterCompletion(TransactionSynchronization.STATUS_ROLLED_BACK);
+            verify(storage).move(startsWith("trash/evidence/"), eq(evidence.getStorageKey()));
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+    }
+
+    @Test
+    void auditFailureLeavesRollbackRestorationToTransactionSynchronization() throws Exception {
+        UUID evidenceId = UUID.randomUUID();
+        EvidenceEntity evidence = evidence(evidenceId);
+        when(evidenceRepository.findById(evidenceId)).thenReturn(Optional.of(evidence));
+        when(testCaseRepository.findById(ptc.getId())).thenReturn(Optional.of(ptc));
+        when(assigneeRepository.existsByProjectTestCaseIdAndUserId(ptc.getId(), tester.getId())).thenReturn(true);
+        when(storage.resolve(startsWith("trash/evidence/"))).thenReturn(tempDir.resolve("trash.bin"));
+        Files.createFile(tempDir.resolve("trash.bin"));
+        doThrow(new IllegalStateException("audit unavailable")).when(auditService).record(any(), any(), any(), any(), any(), anyMap());
+
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            assertThatThrownBy(() -> service.delete(evidenceId, tester))
+                    .isInstanceOf(IllegalStateException.class);
+            verify(storage, never()).move(startsWith("trash/evidence/"), eq(evidence.getStorageKey()));
+            TransactionSynchronizationManager.getSynchronizations().get(0)
+                    .afterCompletion(TransactionSynchronization.STATUS_ROLLED_BACK);
+            verify(storage).move(startsWith("trash/evidence/"), eq(evidence.getStorageKey()));
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+    }
+
+    private EvidenceEntity evidence(UUID evidenceId) {
+        EvidenceEntity evidence = new EvidenceEntity();
+        evidence.setId(evidenceId);
+        evidence.setProjectTestCase(ptc);
+        evidence.setStorageKey("final/evidence/original.bin");
+        evidence.setOriginalFilename("report.txt");
+        evidence.setFileSize(12L);
+        return evidence;
     }
 
     @Test

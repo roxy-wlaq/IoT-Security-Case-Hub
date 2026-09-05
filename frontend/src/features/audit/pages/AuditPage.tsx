@@ -1,8 +1,15 @@
 import { Alert, Button, Form, Input, Select, Table, Tag, Typography } from 'antd';
 import { useCallback, useEffect, useState } from 'react';
 import { AUDIT_ACTIONS, listAuditLogs, type AuditAction, type AuditLog } from '@/features/audit/api/auditApi';
+import PermissionGuard from '@/shared/components/PermissionGuard';
 
 export function AuditPage() {
+  return <PermissionGuard permission="audit:read" roles={["ADMIN"]}>
+    <AuditLogContent />
+  </PermissionGuard>;
+}
+
+function AuditLogContent() {
   const [rows, setRows] = useState<AuditLog[]>([]);
   const [page, setPage] = useState({ page: 0, size: 20, total: 0 });
   const [filters, setFilters] = useState<{ action?: AuditAction; resourceType?: string; resourceId?: string; actorUsername?: string }>({});

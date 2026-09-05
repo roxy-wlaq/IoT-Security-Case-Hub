@@ -25,10 +25,15 @@ import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.multipart.MultipartFile;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Service
 public class EvidenceService {
+    private static final Logger log = LoggerFactory.getLogger(EvidenceService.class);
     private final EvidenceRepository evidenceRepository;
     private final ProjectTestCaseRepository testCaseRepository;
     private final ProjectTestCaseAssigneeRepository assigneeRepository;
@@ -115,21 +120,64 @@ public class EvidenceService {
         EvidenceEntity entity = requireEvidence(evidenceId);
         requireAssigned(entity.getProjectTestCase().getId(), principal, ErrorCode.EVIDENCE_DELETE_FORBIDDEN);
         String trashKey = "trash/evidence/" + UUID.randomUUID() + ".bin";
+        boolean synchronizationRegistered = false;
         try {
             storage.move(entity.getStorageKey(), trashKey);
+            if (TransactionSynchronizationManager.isSynchronizationActive()) {
+                TransactionSynchronizationManager.registerSynchronization(
+                        new EvidenceDeletionSynchronization(storage, entity.getStorageKey(), trashKey));
+                synchronizationRegistered = true;
+            }
             evidenceRepository.delete(entity);
             evidenceRepository.flush();
-            try { storage.delete(trashKey); } catch (IOException ignored) { }
             if (auditService != null) {
                 auditService.record(AuditAction.EVIDENCE_DELETE, principal, AuditResourceType.EVIDENCE,
                         entity.getId(), entity.getOriginalFilename(), Map.of("fileSize", entity.getFileSize()));
             }
         } catch (IOException | RuntimeException ex) {
-            try {
-                if (storage.resolve(trashKey).toFile().exists()) storage.move(trashKey, entity.getStorageKey());
-            } catch (IOException ignored) { }
+            if (!synchronizationRegistered) {
+                restoreFromTrash(storage, trashKey, entity.getStorageKey());
+            }
             if (ex instanceof RuntimeException runtime) throw runtime;
             throw new IllegalStateException("Evidence delete failed", ex);
+        }
+    }
+
+    private static void restoreFromTrash(StorageService storage, String trashKey, String originalKey) {
+        try {
+            if (Files.exists(storage.resolve(trashKey))) {
+                storage.move(trashKey, originalKey);
+            }
+        } catch (IOException | RuntimeException restoreFailure) {
+            log.warn("Could not restore evidence object {} from trash", trashKey, restoreFailure);
+        }
+    }
+
+    private static final class EvidenceDeletionSynchronization implements TransactionSynchronization {
+        private final StorageService storage;
+        private final String originalKey;
+        private final String trashKey;
+
+        private EvidenceDeletionSynchronization(StorageService storage, String originalKey, String trashKey) {
+            this.storage = storage;
+            this.originalKey = originalKey;
+            this.trashKey = trashKey;
+        }
+
+        @Override
+        public void afterCommit() {
+            try {
+                storage.delete(trashKey);
+            } catch (IOException | RuntimeException cleanupFailure) {
+                log.warn("Could not permanently delete committed evidence trash object {}", trashKey, cleanupFailure);
+            }
+        }
+
+        @Override
+        public void afterCompletion(int status) {
+            if (status == STATUS_ROLLED_BACK) {
+                restoreFromTrash(storage, trashKey, originalKey);
+            }
         }
     }
 

@@ -18,6 +18,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 class Batch5AuditPersistenceIT extends AbstractIntegrationTest {
 
@@ -29,6 +31,9 @@ class Batch5AuditPersistenceIT extends AbstractIntegrationTest {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    private PlatformTransactionManager transactionManager;
 
     @BeforeEach
     void clearAuditRows() {
@@ -85,5 +90,39 @@ class Batch5AuditPersistenceIT extends AbstractIntegrationTest {
 
         assertThat(page0.content()).extracting("id").containsExactly(secondId);
         assertThat(page1.content()).extracting("id").containsExactly(firstId);
+    }
+
+    @Test
+    void persistsEveryFrozenAuthoritativeMutationActionExactlyOnce() {
+        UUID actorId = UUID.randomUUID();
+        List<AuditAction> actions = List.of(
+                AuditAction.ROLE_CHANGE,
+                AuditAction.PROJECT_CREATE,
+                AuditAction.PROJECT_ARCHIVE,
+                AuditAction.TEST_CASE_PUBLISH,
+                AuditAction.TEST_CASE_DEPRECATE,
+                AuditAction.GENERATION_RULE_UPDATE,
+                AuditAction.CAPABILITY_LIBRARY_UPDATE,
+                AuditAction.EVIDENCE_DELETE);
+
+        actions.forEach(action -> service.record(action, actorId, "admin", action.name(),
+                action.name(), action.name(), Map.of("outcome", "success")));
+
+        assertThat(repository.findAll()).extracting(AuditRecordEntity::getAction)
+                .containsExactlyInAnyOrderElementsOf(actions);
+    }
+
+    @Test
+    void auditInsertRollsBackWithTheBusinessTransaction() {
+        UUID actorId = UUID.randomUUID();
+        TransactionTemplate transaction = new TransactionTemplate(transactionManager);
+
+        assertThatThrownBy(() -> transaction.executeWithoutResult(status -> {
+            service.record(AuditAction.PROJECT_CREATE, actorId, "admin", "PROJECT",
+                    "project-rollback", "rollback", Map.of("outcome", "success"));
+            throw new IllegalStateException("business mutation failed");
+        })).isInstanceOf(IllegalStateException.class);
+
+        assertThat(repository.findAll()).isEmpty();
     }
 }

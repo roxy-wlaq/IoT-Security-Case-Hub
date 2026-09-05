@@ -11,10 +11,10 @@ public interface GenerationRuleRepository extends JpaRepository<GenerationRuleEn
 
     boolean existsByRuleCodeIgnoreCase(String ruleCode);
 
-    @EntityGraph(attributePaths = {"groups", "groups.conditions", "outputs"})
+    @EntityGraph(attributePaths = {"groups"})
     List<GenerationRuleEntity> findAllByOrderByRuleCodeAsc();
 
-    @EntityGraph(attributePaths = {"groups", "groups.conditions", "outputs"})
+    @EntityGraph(attributePaths = {"groups"})
     java.util.Optional<GenerationRuleEntity> findWithGraphById(UUID id);
 
     List<GenerationRuleEntity> findByStatusOrderByRuleCodeAsc(GenerationRuleStatus status);
