@@ -175,7 +175,7 @@ public class EvidenceService {
 
         @Override
         public void afterCompletion(int status) {
-            if (status == STATUS_ROLLED_BACK) {
+            if (status != STATUS_COMMITTED) {
                 restoreFromTrash(storage, trashKey, originalKey);
             }
         }

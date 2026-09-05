@@ -157,6 +157,30 @@ class EvidenceServiceAuthorizationTest {
     }
 
     @Test
+    void deleteRestoresTrashObjectWhenTransactionCompletionIsUnknown() throws Exception {
+        UUID evidenceId = UUID.randomUUID();
+        EvidenceEntity evidence = evidence(evidenceId);
+        when(evidenceRepository.findById(evidenceId)).thenReturn(Optional.of(evidence));
+        when(testCaseRepository.findById(ptc.getId())).thenReturn(Optional.of(ptc));
+        when(assigneeRepository.existsByProjectTestCaseIdAndUserId(ptc.getId(), tester.getId())).thenReturn(true);
+        when(storage.resolve(startsWith("trash/evidence/"))).thenReturn(tempDir.resolve("trash.bin"));
+        Files.createFile(tempDir.resolve("trash.bin"));
+
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            service.delete(evidenceId, tester);
+
+            TransactionSynchronizationManager.getSynchronizations().get(0)
+                    .afterCompletion(TransactionSynchronization.STATUS_UNKNOWN);
+
+            verify(storage).move(startsWith("trash/evidence/"), eq(evidence.getStorageKey()));
+            verify(storage, never()).delete(startsWith("trash/evidence/"));
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+    }
+
+    @Test
     void auditFailureLeavesRollbackRestorationToTransactionSynchronization() throws Exception {
         UUID evidenceId = UUID.randomUUID();
         EvidenceEntity evidence = evidence(evidenceId);
