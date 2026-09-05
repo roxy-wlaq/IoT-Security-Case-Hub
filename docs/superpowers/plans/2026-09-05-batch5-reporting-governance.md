@@ -16,9 +16,12 @@
 - Use `dev/v1-implementation`; do not modify `main`.
 - Treat existing uncommitted Audit files and service edits as user-confirmed starting material; never stage unrelated files.
 - V017 is immutable; Batch 5 persistence may add only V018 Audit schema.
-- Export requires `export:project` plus existing project resource access.
+- Export requires `export:project` plus existing project resource access and reads all export rows under `@Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)`.
 - Audit is append-only and read-only to application users; no update/delete API.
-- User-controlled Excel text beginning with `=`, `+`, `-`, or `@` must be emitted as safe text without changing stored data.
+- `ExcelCellSafety.text(null)` returns `""`; normal text is unchanged; `=`, `+`, `-`, and `@` prefixes receive one ASCII apostrophe without changing stored data.
+- Audit detail sanitization must recurse through Map, Collection, and array values; top-level-only filtering is forbidden.
+- Audit pagination ordering is `occurredAt DESC, id DESC`.
+- Business events and successful `LOGIN` require actor id and username; `LOGIN_FAILURE` permits nullable actor id but requires normalized username.
 - Critical persistence verification uses PostgreSQL 16 Testcontainers, never H2 as the sole proof.
 - QA owns formal PASS/FAIL; DEV reports actual development checks and hands off `QA_TEST_PROMPT`.
 
@@ -41,7 +44,7 @@
 - [ ] **Step 1: Write the documentation contract test.** Assert the Batch 5 document names the export endpoint, all three sheet names, fixed column headings, export permission, Admin audit restriction, required event catalog, V018, and no Phase 27 scope.
 - [ ] **Step 2: Run the contract test and observe the expected failure** because the Batch 5 document and POI dependency are not yet present in the committed tree.
 - [ ] **Step 3: Add the smallest POI dependencies** (`poi-ooxml` at the repository-approved compatible version) and update the export package description; do not add unrelated reporting libraries.
-- [ ] **Step 4: Write `docs/batch5-api-contract.md`** from the approved spec, including the exact workbook column order, historical/removed semantics, formula safety, Audit fields, authorization, and transaction guarantee.
+- [ ] **Step 4: Write `docs/batch5-api-contract.md`** from the approved spec, including Repeatable Read snapshot semantics, exact workbook column order (`Backing Type` and `Plan Sources`), historical/removed semantics, the null/apostrophe formula-safety algorithm, Audit fields, recursive sanitization, deterministic pagination ordering, actor rules, authorization, and transaction guarantee.
 - [ ] **Step 5: Run the contract test and the backend compile.** Expected: PASS and Java compilation succeeds under JDK 21.
 - [ ] **Step 6: Commit only the contract/dependency files.**
 
@@ -69,8 +72,8 @@ git commit -m "docs(batch5): freeze reporting and audit contracts"
 
 - [ ] **Step 1: Add failing unit tests** for sensitive-detail removal, required actor validation, page-size clamping, and stable descending order.
 - [ ] **Step 2: Run the unit tests and verify they fail** against the incomplete current implementation or expose any contract mismatch.
-- [ ] **Step 3: Add the minimal entity/repository/service corrections** including immutable field handling, action/resource indexes, bounded page size, and detail sanitization.
-- [ ] **Step 4: Add the PostgreSQL integration test** that migrates V001–V018, writes records, verifies persistence and filters, confirms no update/delete application path exists, and asserts sensitive keys are absent.
+- [ ] **Step 3: Add the minimal entity/repository/service corrections** including immutable field handling, action/resource indexes, bounded page size, deterministic `occurredAt DESC, id DESC` ordering, actor validation, and recursive sanitization of nested Map/Collection/array values.
+- [ ] **Step 4: Add the PostgreSQL integration test** that migrates V001–V018, writes records, verifies persistence and filters, confirms deterministic page boundaries, confirms no update/delete application path exists, and asserts top-level and nested sensitive keys are absent.
 - [ ] **Step 5: Run the targeted unit and IT tests** with JDK 21 and Testcontainers; expected: PASS.
 - [ ] **Step 6: Commit the Audit persistence/read-model slice.**
 
@@ -126,12 +129,13 @@ git commit -m "feat(batch5): audit governed mutations"
 
 - [ ] **Step 1: Write failing tests** for formula-like text escaping and for workbook sheets/headers/data from a mixed master/custom project.
 - [ ] **Step 2: Run the targeted tests and verify they fail** because the writer/controller do not yet exist.
-- [ ] **Step 3: Implement `ProjectExportSnapshot`** to load one coherent project view using the existing repositories and `ProjectAccessPolicy.requireView`; map separate Master, Version, ProjectTestCase, Custom, assignee, execution, relation, removed, and Evidence metadata fields.
-- [ ] **Step 4: Implement the SXSSF writer** with the exact three sheet names and column order from the spec, fixed header rows, safe text cells, no file bytes, and `dispose()` in a finally block.
+- [ ] **Step 3: Implement `ProjectExportSnapshot`** to load one coherent project view using `@Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)`, the existing repositories, and `ProjectAccessPolicy.requireView`; map separate Master, Version, ProjectTestCase, Custom, `Backing Type`, `Plan Sources`, assignee, execution, relation, removed, and Evidence metadata fields.
+- [ ] **Step 4: Implement the SXSSF writer** with the exact three sheet names and column order from the spec, fixed header rows, `ExcelCellSafety.text(null) = ""`, one apostrophe for formula-significant prefixes, no file bytes, and `dispose()` in a finally block.
 - [ ] **Step 5: Implement the controller response** with the correct XLSX media type, attachment filename, `export:project` method security, and resource-level access check.
 - [ ] **Step 6: Add the large-row test** using thousands of Test Case/Evidence metadata rows and assert the generated ZIP is readable by `XSSFWorkbook` after writing; do not use `XSSFWorkbook` as the production writer.
-- [ ] **Step 7: Run the export unit/IT suite and existing project/evidence tests.** Expected: PASS.
-- [ ] **Step 8: Commit the export backend slice.**
+- [ ] **Step 7: Add the concurrent mutation test** that blocks the export between two repository reads, commits a separate PostgreSQL update, then proves the exported rows all come from the original Repeatable Read snapshot.
+- [ ] **Step 8: Run the export unit/IT suite and existing project/evidence tests.** Expected: PASS.
+- [ ] **Step 9: Commit the export backend slice.**
 
 ```bash
 git add backend/src/main/java/com/company/casehub/export backend/src/main/java/com/company/casehub/project/service/ProjectAccessPolicy.java backend/src/test/java/com/company/casehub/export backend/src/test/java/com/company/casehub/integration/Batch5ProjectExportIT.java
@@ -237,7 +241,8 @@ DEV Batch 5 complete
 → QA FAIL: DEV_FIX_PROMPT
 → QA PASS: DEV_PUSH_PROMPT
 → DEV Push
-→ STATIC_REVIEW_PROMPT
-→ Static Review
-→ PM
+→ report pushed full SHA
+→ user reads GitHub remote delta for Static Review
+→ Static Review FAIL: DEV_FIX_PROMPT
+→ Static Review PASS: PM_NEXT_STAGE_PROMPT
 ```

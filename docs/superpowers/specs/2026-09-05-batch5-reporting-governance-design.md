@@ -8,7 +8,7 @@ The batch is an observer/governance addition. It must not redefine Project, Test
 
 ## Architecture
 
-Project export is a protected read operation in a dedicated `export` module. The service reuses the existing project resource policy, materializes the approved project/test-plan/evidence metadata view under one read-only transaction, and writes three fixed sheets with Apache POI `SXSSFWorkbook`. The workbook contains metadata only; it never includes evidence bytes, storage paths, credentials, or secrets.
+Project export is a protected read operation in a dedicated `export` module. The service reuses the existing project resource policy, materializes the approved project/test-plan/evidence metadata view under one `@Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)` database snapshot, and writes three fixed sheets with Apache POI `SXSSFWorkbook`. The workbook contains metadata only; it never includes evidence bytes, storage paths, credentials, or secrets.
 
 Audit is an append-only governance module in a dedicated `audit` package. A single `AuditService.record` call is made from each authoritative mutation service. Business mutations and their audit records share the caller transaction; login audit uses an isolated transaction and is failure-isolated from authentication. The query API is read-only and Admin-only.
 
@@ -24,7 +24,7 @@ The endpoint requires `export:project` and a successful existing project-view ch
 
 `GET /api/v1/audit-logs`
 
-The endpoint requires `audit:read` and is additionally restricted to the existing `ADMIN` role. Query parameters are `page`, `size`, `action`, `resourceType`, `resourceId`, `actorUsername`, `from`, and `to`. Results use the existing `PagedResponse` shape and are ordered by `occurredAt DESC`.
+The endpoint requires `audit:read` and is additionally restricted to the existing `ADMIN` role. Query parameters are `page`, `size`, `action`, `resourceType`, `resourceId`, `actorUsername`, `from`, and `to`. Results use the existing `PagedResponse` shape and are ordered deterministically by `occurredAt DESC, id DESC`.
 
 There are no application update or delete endpoints for audit records.
 
@@ -46,20 +46,21 @@ The workbook contains exactly these sheets and column orders:
 ### Test Cases
 
 1. Project Test Case ID
-2. Source
+2. Backing Type
 3. Master Test Case ID
 4. Custom Test Case ID
 5. Case Code
 6. Case Name
-7. Bound Version ID
-8. Version
-9. Execution Status
-10. Relation Status
-11. Removed
-12. Assignees
-13. Evidence Count
+7. Plan Sources
+8. Bound Version ID
+9. Version
+10. Execution Status
+11. Relation Status
+12. Removed
+13. Assignees
+14. Evidence Count
 
-`Source` is `MASTER` or `CUSTOM`. Master identity, Test Case Version identity, and Project Test Case identity remain separate. A Custom row has a Custom Test Case ID and no bound master/version identity. Removed rows remain visible with `Removed = true` so the export is an operational snapshot rather than a silent filter.
+`Backing Type` is `MASTER` or `CUSTOM`; `Plan Sources` preserves the existing `ProjectTestCaseSourceType` provenance values such as `INITIAL`, `GENERATED`, `PROGRESSIVE`, `MANUAL`, and `CUSTOM`. Master identity, Test Case Version identity, and Project Test Case identity remain separate. A Custom row has a Custom Test Case ID and no bound master/version identity. Removed rows remain visible with `Removed = true` so the export is an operational snapshot rather than a silent filter.
 
 ### Evidence Index
 
@@ -74,7 +75,7 @@ The workbook contains exactly these sheets and column orders:
 
 The sheet excludes `storage_key`, filesystem paths, trash/temp paths, and file bytes.
 
-Any user-controlled text beginning with `=`, `+`, `-`, or `@` is emitted as a safe text cell using the chosen Excel text-escaping contract. The database value is unchanged.
+`ExcelCellSafety.text(value)` is frozen as follows: `null` becomes `""`; normal text is unchanged; text beginning with `=`, `+`, `-`, or `@` receives one ASCII apostrophe prefix. For example, `=SUM(A1:A2)` is written as `'=SUM(A1:A2)`. The database value is unchanged.
 
 ## Audit Contract
 
@@ -84,7 +85,9 @@ The frozen event catalog is:
 
 `LOGIN_FAILURE` may remain as an additional security-history event if it is already present in the current uncommitted implementation, but it is not substituted for the required successful `LOGIN` event.
 
-Every record answers who, what, resource, and when using actor id/username, action, resource type/id/label, occurrence timestamp, and safe JSON detail. Sensitive authentication material, session identifiers, CSRF values, credentials, and Evidence contents are excluded both at call sites and by service-level detail-key sanitization.
+Every record answers who, what, resource, and when using actor id/username, action, resource type/id/label, occurrence timestamp, and safe JSON detail. Sensitive authentication material, session identifiers, CSRF values, credentials, and Evidence contents are excluded both at call sites and by service-level recursive sanitization of nested Maps, Collections, and arrays. Event-specific allow-lists may further restrict detail fields.
+
+Business events and successful `LOGIN` require both `actorId` and `actorUsername`. `LOGIN_FAILURE` permits a nullable `actorId` and requires the normalized submitted username as `actorUsername`; it never fabricates a user id.
 
 Audit rows have no normal CRUD lifecycle. Resource references are soft references so history survives resource deletion; no retention or cleanup policy is introduced in this batch.
 
@@ -96,10 +99,10 @@ Project export requires both the existing export permission and project resource
 
 ## Persistence Boundary
 
-`V018__audit_records.sql` is the only new persistence migration for Batch 5. It creates the append-only audit table, action check constraint, actor check constraint, and query indexes. V017 is immutable. No Phase 27+ schema is added.
+`V018__audit_records.sql` is the only new persistence migration for Batch 5. It creates the append-only audit table, action check constraint, `actor_username NOT NULL`, an actor-id check requiring non-null ids for all actions except `LOGIN_FAILURE`, and query indexes. V017 is immutable. No Phase 27+ schema is added.
 
 ## Verification Contract
 
-Backend tests must inspect workbook contents, not only HTTP status, and must cover authorization, all sheets, the mixed master/custom plan, version/status semantics, evidence metadata, formula safety, and a realistic large-row SXSSF export. PostgreSQL/Testcontainers tests cover V018, audit persistence, filters/pagination, event uniqueness, immutability, and transaction behavior.
+Backend tests must inspect workbook contents, not only HTTP status, and must cover authorization, all sheets, the mixed master/custom plan, backing identity/plan-source/version/status semantics, evidence metadata, formula safety, a realistic large-row SXSSF export, and a concurrent mutation proving Repeatable Read does not mix two states within one export. PostgreSQL/Testcontainers tests cover V018, audit persistence, recursive nested sanitization, deterministic filters/pagination, event uniqueness, immutability, and transaction behavior.
 
 Frontend tests cover export request handling, project permission visibility, Audit page rendering, pagination, filtering, and Admin guard. The full Phase 0–24 regression remains required. The known `TestCaseDetailLifecycle` timeout is reported separately if it remains; it is not a blanket exemption for new failures.
