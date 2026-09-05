@@ -12,9 +12,13 @@ spring:
       add-mappings: false
   datasource:
     url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:casehub}
-    username: ${DB_USER:casehub}
-    password: ${DB_PASSWORD:casehub}
+    username: ${DB_USER}
+    password: ${DB_PASSWORD}
     driver-class-name: org.postgresql.Driver
+  servlet:
+    multipart:
+      max-file-size: ${CASEHUB_MAX_FILE_SIZE:100MB}
+      max-request-size: ${CASEHUB_MAX_FILE_SIZE:100MB}
   jpa:
     open-in-view: false
     hibernate:
@@ -43,10 +47,10 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health
   endpoint:
     health:
-      show-details: when_authorized
+      show-details: never
 
 server:
   port: 8080

@@ -1,0 +1,19 @@
+casehub:
+  security:
+    cors:
+      allowed-origins:
+        - http://localhost:5173
+        - http://localhost:4173
+    proxy:
+      trusted-proxies:
+        - 127.0.0.1
+        - ::1
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never

@@ -6,6 +6,7 @@ import com.company.casehub.auth.dto.LoginRequest;
 import com.company.casehub.auth.security.UserPrincipal;
 import com.company.casehub.common.exception.CaseHubException;
 import com.company.casehub.common.exception.ErrorCode;
+import com.company.casehub.config.ProxyIpProperties;
 import com.company.casehub.user.entity.UserEntity;
 import com.company.casehub.user.repository.UserRepository;
 import com.company.casehub.user.service.CurrentUserService;
@@ -52,6 +53,7 @@ public class AuthenticationService {
     private final SessionAuthenticationStrategy sessionAuthenticationStrategy;
     private final SessionRegistry sessionRegistry;
     private final com.company.casehub.audit.service.AuditService auditService;
+    private final ProxyIpProperties proxyIpProperties;
 
     public CurrentUserResponse login(LoginRequest request, HttpServletRequest httpRequest,
                                      HttpServletResponse httpResponse) {
@@ -179,7 +181,8 @@ public class AuthenticationService {
 
     private String clientIp(HttpServletRequest request) {
         String forwarded = request.getHeader("X-Forwarded-For");
-        if (forwarded != null && !forwarded.isBlank()) {
+        if (proxyIpProperties.isTrustedProxy(request.getRemoteAddr())
+                && forwarded != null && !forwarded.isBlank()) {
             return forwarded.split(",")[0].trim();
         }
         return request.getRemoteAddr();

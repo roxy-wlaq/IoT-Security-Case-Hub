@@ -4,6 +4,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 /**
@@ -17,10 +18,23 @@ import org.springframework.stereotype.Component;
 @Component
 public class LoginAttemptService {
 
-    private static final int MAX_ATTEMPTS = 5;
-    private static final Duration BLOCK_DURATION = Duration.ofMinutes(15);
+    private final int maxAttempts;
+    private final Duration blockDuration;
 
     private final Map<String, Attempt> attempts = new ConcurrentHashMap<>();
+
+    public LoginAttemptService() {
+        this(5, Duration.ofMinutes(15));
+    }
+
+    public LoginAttemptService(@Value("${casehub.security.login.max-failures:5}") int maxAttempts,
+                               @Value("${casehub.security.login.block-duration:15m}") Duration blockDuration) {
+        if (maxAttempts < 1 || blockDuration.isNegative() || blockDuration.isZero()) {
+            throw new IllegalArgumentException("Login throttling configuration must be positive");
+        }
+        this.maxAttempts = maxAttempts;
+        this.blockDuration = blockDuration;
+    }
 
     private record Attempt(int count, Instant blockedUntil) {
     }
@@ -50,8 +64,8 @@ public class LoginAttemptService {
         // Atomic read-modify-write so concurrent failures cannot lose a count.
         attempts.compute(key, (k, v) -> {
             int next = (v == null ? 0 : v.count()) + 1;
-            if (next >= MAX_ATTEMPTS) {
-                return new Attempt(next, Instant.now().plus(BLOCK_DURATION));
+            if (next >= maxAttempts) {
+                return new Attempt(next, Instant.now().plus(blockDuration));
             }
             return new Attempt(next, null);
         });

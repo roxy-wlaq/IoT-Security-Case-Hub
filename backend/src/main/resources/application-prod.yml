@@ -8,10 +8,25 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health
   endpoint:
     health:
-      show-details: when_authorized
+      show-details: never
+
+casehub:
+  security:
+    cors:
+      allowed-origins: []
+    proxy:
+      trusted-proxies:
+        - 127.0.0.1
+        - ::1
+        - 10.0.0.0/8
+        - 172.16.0.0/12
+        - 192.168.0.0/16
+    login:
+      max-failures: 5
+      block-duration: 15m
 
 server:
   servlet:

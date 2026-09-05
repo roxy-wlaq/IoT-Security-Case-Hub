@@ -1,5 +1,7 @@
 package com.company.casehub.auth.security;
 
+import com.company.casehub.config.ProductionCorsProperties;
+import com.company.casehub.config.ProxyIpProperties;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
@@ -28,6 +30,10 @@ import org.springframework.security.web.context.SecurityContextHolderFilter;
 import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.csrf.CsrfTokenRepository;
+import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 /**
  * V1 security baseline:
@@ -44,6 +50,8 @@ import org.springframework.security.web.csrf.CsrfTokenRepository;
 @Configuration
 @EnableWebSecurity
 @EnableMethodSecurity
+@org.springframework.boot.context.properties.EnableConfigurationProperties({
+        ProductionCorsProperties.class, ProxyIpProperties.class})
 @RequiredArgsConstructor
 public class SecurityConfig {
 
@@ -53,7 +61,25 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http, SessionRegistry sessionRegistry) throws Exception {
         http
-                .csrf(csrf -> csrf.csrfTokenRepository(csrfTokenRepository()))
+                .csrf(csrf -> csrf
+                        .csrfTokenRepository(csrfTokenRepository())
+                        // The SPA echoes the raw readable XSRF-TOKEN cookie. Spring
+                        // Security 6.3 defaults to XOR-masked request values, which
+                        // would reject that frozen cookie/header contract in production.
+                        .csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler()))
+                .cors(cors -> { })
+                .headers(headers -> {
+                    headers.contentTypeOptions(contentType -> { });
+                    headers.frameOptions(frame -> frame.deny());
+                    headers.referrerPolicy(referrer -> referrer
+                            .policy(org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter.ReferrerPolicy.NO_REFERRER));
+                    headers.permissionsPolicy(permissions -> permissions
+                            .policy("camera=(), microphone=(), geolocation=()"));
+                    headers.contentSecurityPolicy(csp -> csp.policyDirectives(
+                            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+                                    + "img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; "
+                                    + "frame-ancestors 'none'; base-uri 'self'"));
+                })
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/v1/auth/csrf", "/actuator/health").permitAll()
                         .requestMatchers("/api/v1/auth/login", "/api/v1/auth/logout").permitAll()
@@ -69,6 +95,25 @@ public class SecurityConfig {
                 .httpBasic(AbstractHttpConfigurer::disable)
                 .addFilterAfter(sessionExpiryFilter(sessionRegistry), SecurityContextHolderFilter.class);
         return http.build();
+    }
+
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource(ProductionCorsProperties properties) {
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        // An empty production allow-list means same-origin only. Do not register an
+        // empty CorsConfiguration: Spring would reject browser requests carrying the
+        // same-origin Origin header before the normal CSRF check runs. With no mapping,
+        // the browser still enforces SOP and cross-origin callers receive no CORS grant.
+        if (!properties.getAllowedOrigins().isEmpty()) {
+            CorsConfiguration configuration = new CorsConfiguration();
+            configuration.setAllowedOrigins(properties.getAllowedOrigins());
+            configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
+            configuration.setAllowedHeaders(List.of("Accept", "Content-Type", SecurityConstants.CSRF_HEADER_NAME));
+            configuration.setAllowCredentials(true);
+            configuration.setMaxAge(3600L);
+            source.registerCorsConfiguration("/api/**", configuration);
+        }
+        return source;
     }
 
     @Bean

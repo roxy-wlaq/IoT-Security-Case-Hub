@@ -5,6 +5,13 @@
 casehub:
   bootstrap:
     admin-password: ""
+  security:
+    cors:
+      allowed-origins: []
+    proxy:
+      trusted-proxies:
+        - 127.0.0.1
+        - ::1
 
 spring:
   jpa:

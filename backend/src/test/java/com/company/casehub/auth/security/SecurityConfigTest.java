@@ -8,6 +8,7 @@ import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.csrf.CsrfToken;
 import org.springframework.security.web.csrf.CsrfTokenRepository;
+import org.springframework.web.cors.CorsConfigurationSource;
 
 /**
  * Guards the frozen CSRF contract: the server must validate the {@code X-XSRF-TOKEN}
@@ -33,5 +34,15 @@ class SecurityConfigTest {
         CsrfToken token = repository.generateToken(request);
 
         assertThat(token.getHeaderName()).isEqualTo(SecurityConstants.CSRF_HEADER_NAME);
+    }
+
+    @Test
+    void emptyProductionOriginAllowListLeavesSameOriginCorsUnmodified() {
+        SecurityConfig config = new SecurityConfig(null, null);
+        CorsConfigurationSource source = config.corsConfigurationSource(new com.company.casehub.config.ProductionCorsProperties());
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader("Origin", "https://casehub.example");
+
+        assertThat(source.getCorsConfiguration(request)).isNull();
     }
 }
