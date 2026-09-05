@@ -9,6 +9,7 @@ import com.company.casehub.audit.entity.AuditRecordEntity;
 import com.company.casehub.audit.repository.AuditRecordRepository;
 import com.company.casehub.audit.service.AuditService;
 import java.time.Instant;
+import java.sql.Timestamp;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -67,7 +68,7 @@ class Batch5AuditPersistenceIT extends AbstractIntegrationTest {
 
     @Test
     void paginationUsesIdAsStableSecondaryOrdering() {
-        Instant occurredAt = Instant.parse("2026-01-01T00:00:00Z");
+                    Timestamp occurredAt = Timestamp.from(Instant.parse("2026-01-01T00:00:00Z"));
         UUID firstId = UUID.fromString("00000000-0000-0000-0000-000000000001");
         UUID secondId = UUID.fromString("00000000-0000-0000-0000-000000000002");
         jdbcTemplate.update("INSERT INTO casehub.audit_records "
