@@ -18,6 +18,7 @@ import com.company.casehub.customcase.dto.CustomStepRequest;
 import com.company.casehub.customcase.dto.LibrarySubmissionResponse;
 import com.company.casehub.customcase.entity.CustomTestStepEntity;
 import com.company.casehub.customcase.entity.ProjectCustomTestCaseEntity;
+import com.company.casehub.customcase.repository.CustomTestStepRepository;
 import com.company.casehub.customcase.repository.ProjectCustomTestCaseRepository;
 import com.company.casehub.execution.entity.ProjectTestCaseAssigneeEntity;
 import com.company.casehub.execution.entity.ProjectTestCaseEntity;
@@ -37,6 +38,7 @@ import com.company.casehub.testcase.entity.TestCaseVersionEntity;
 import com.company.casehub.testcase.entity.TestCaseVersionStatus;
 import com.company.casehub.testcase.entity.TransitionEntity;
 import com.company.casehub.testcase.entity.TransitionTargetEntity;
+import com.company.casehub.testcase.repository.DecisionPointRepository;
 import com.company.casehub.testcase.repository.MasterTestCaseRepository;
 import com.company.casehub.testcase.repository.RevisionContributorRepository;
 import com.company.casehub.testcase.service.DagValidationService;
@@ -56,6 +58,8 @@ import org.springframework.util.StringUtils;
 @Service
 public class CustomTestCaseService {
     private final ProjectCustomTestCaseRepository customRepository;
+    private final CustomTestStepRepository customStepRepository;
+    private final DecisionPointRepository decisionPointRepository;
     private final ProjectRepository projectRepository;
     private final ProjectCoordinatorRepository coordinatorRepository;
     private final ProjectAccessPolicy accessPolicy;
@@ -70,7 +74,8 @@ public class CustomTestCaseService {
     private final com.company.casehub.user.repository.RoleRepository roleRepository;
     private final UserRoleRepository userRoleRepository;
 
-    public CustomTestCaseService(ProjectCustomTestCaseRepository customRepository, ProjectRepository projectRepository,
+    public CustomTestCaseService(ProjectCustomTestCaseRepository customRepository, CustomTestStepRepository customStepRepository,
+                                 DecisionPointRepository decisionPointRepository, ProjectRepository projectRepository,
                                  ProjectCoordinatorRepository coordinatorRepository, ProjectAccessPolicy accessPolicy,
                                  UserRepository userRepository, ProjectTestCaseRepository projectTestCaseRepository,
                                  ProjectTestCaseSourceRepository sourceRepository,
@@ -79,6 +84,8 @@ public class CustomTestCaseService {
                                  RevisionContributorRepository contributorRepository, DagValidationService dagValidationService,
                                  com.company.casehub.user.repository.RoleRepository roleRepository, UserRoleRepository userRoleRepository) {
         this.customRepository = customRepository;
+        this.customStepRepository = customStepRepository;
+        this.decisionPointRepository = decisionPointRepository;
         this.projectRepository = projectRepository;
         this.coordinatorRepository = coordinatorRepository;
         this.accessPolicy = accessPolicy;
@@ -222,12 +229,22 @@ public class CustomTestCaseService {
     }
 
     private void replaceDefinition(ProjectCustomTestCaseEntity custom, CustomTestCaseRequest request) {
+        List<CustomTestStepEntity> existingSteps = new ArrayList<>(custom.getSteps());
+        List<DecisionPointEntity> existingDecisionPoints = new ArrayList<>(custom.getDecisionPoints());
         custom.getSteps().clear();
+        custom.getDecisionPoints().clear();
+        if (!existingSteps.isEmpty()) {
+            customStepRepository.deleteAllInBatch(existingSteps);
+            customStepRepository.flush();
+        }
+        if (!existingDecisionPoints.isEmpty()) {
+            decisionPointRepository.deleteAllInBatch(existingDecisionPoints);
+            decisionPointRepository.flush();
+        }
         int seq = 1;
         for (CustomStepRequest item : request.steps() == null ? List.<CustomStepRequest>of() : request.steps()) {
             CustomTestStepEntity step = new CustomTestStepEntity(); step.setCustomTestCase(custom); step.setSequenceNo(seq++); step.setTitle(trimToNull(item.title())); step.setContent(item.content().trim()); custom.getSteps().add(step);
         }
-        custom.getDecisionPoints().clear();
         java.util.Set<Integer> displayOrders = new java.util.HashSet<>();
         for (CustomDecisionPointRequest item : request.decisionPoints() == null ? List.<CustomDecisionPointRequest>of() : request.decisionPoints()) {
             if (!displayOrders.add(item.displayOrder())) {
