@@ -13,6 +13,9 @@ export interface VersionUpgradeResult { projectTestCaseId: string; previousVersi
 
 export async function listProjects(): Promise<ProjectSummary[]> { return (await httpClient.get<ProjectSummary[]>('/projects')).data; }
 export async function getProject(id: string): Promise<Project> { return (await httpClient.get<Project>(`/projects/${id}`)).data; }
+export async function downloadProjectExport(id: string): Promise<Blob> {
+  return (await httpClient.get<Blob>(`/projects/${id}/export.xlsx`, { responseType: 'blob' })).data;
+}
 export async function createProject(payload: { projectName: string; deviceName: string; generationMode?: string; standardTaskTypeIds: string[] }): Promise<Project> {
   return (await httpClient.post<Project>('/projects', payload)).data;
 }
