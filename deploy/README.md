@@ -14,10 +14,10 @@
 User Browser
     │
     ▼
-  Nginx :80（可选 :443）
+  Nginx :80（308 redirect）→ :443 TLS
    ├──► React 静态文件（/usr/share/nginx/html）
    ├──► /api/      → http://backend:8080
-   ├──► /actuator/ → http://backend:8080
+   ├──► /actuator/health → http://backend:8080
    └──► /healthz   → 本地直接返回 200
                         │
                         ▼
@@ -40,10 +40,12 @@ deploy/
 ├─ nginx.Dockerfile              多阶段构建（Node 构建 frontend → nginx 镜像）
 ├─ .env.example                  环境变量模板（唯一允许提交的环境文件）
 ├─ README.md                     本文件
+├─ scripts/                      health / backup / restore / upgrade / rollback
+├─ tests/                        deployment contract checks
 └─ nginx/
    ├─ nginx.conf                 worker / gzip / 安全头 / 限流 zone
    └─ conf.d/
-      └─ casehub.conf            SPA、/api/ 反代、/healthz、HTTPS 预留
+      └─ casehub.conf            HTTP redirect、HTTPS、SPA、/api/ 反代
 ```
 
 两个 Dockerfile 的 build context 都是**仓库根目录**，由 compose 的 `context: ..` 指定。
@@ -177,9 +179,8 @@ docker compose ps
 docker compose logs --no-color -f
 docker compose logs --no-color --tail=50 backend
 
-# 健康检查
-curl -fsS http://localhost/healthz                 # nginx
-curl -fsS http://localhost/actuator/health         # backend
+# 健康检查（测试证书时可加 CASEHUB_INSECURE_TLS=true）
+CASEHUB_INSECURE_TLS=true ./scripts/health-check.sh
 
 # 停止（保留数据卷）
 docker compose down
@@ -247,46 +248,51 @@ Evidence 下载
 
 ---
 
-## 9. 备份 / 恢复
+## 9. 备份 / 恢复（Phase 28）
 
-> **TODO：Phase 28 实现。**
->
-> 计划位置：`deploy/scripts/backup.sh`、`deploy/scripts/restore.sh`、`deploy/scripts/health-check.sh`。
->
-> 备份必须同时包含 PostgreSQL 与 File Storage，缺任何一部分都不完整
-> （`Deployment-Backup` 第 60 节）。
+`scripts/backup.sh` 生成一个带 manifest 和 SHA-256 的备份集合，集合同时包含
+`database.dump`（PostgreSQL custom format）与 `file-storage.tar`。默认 named volume
+模式通过 backend 容器的 `/data/casehub` 卷归档；bind mount 模式可设置
+`FILE_STORAGE_PATH=/srv/casehub/files`。
+
+数据库和文件必须在同一个写暂停窗口内备份。独立执行备份时，操作者必须先停止
+backend 并设置 `BACKUP_QUIESCE_CONFIRMED=true`；也可以提供
+`BACKUP_QUIESCE_CMD` 与 `BACKUP_RESUME_CMD`。`upgrade.sh` 使用
+`BACKUP_MANAGE_COMPOSE=true` 自动停止并恢复 backend。
 
 设计基线：
 
 | 项 | 值 |
 | --- | --- |
 | 备份内容 | `pg_dump -Fc` + `/srv/casehub/files` 归档 |
-| 备份目录 | `/srv/casehub/backups/<YYYY-MM-DD>/{database.dump,files.tar.zst,manifest.txt}` |
+| 备份目录 | `/srv/casehub/backups/casehub-<UTC timestamp>/{database.dump,file-storage.tar,manifest.txt}` |
 | 频率 | 每天一次，建议 02:00 业务低峰 |
 | 保留 | Daily 14 天 / Weekly 8 周 / Monthly 12 个月 |
 | 目标 | RPO ≤ 24h，RTO ≤ 4h |
 | 恢复演练 | 至少每季度一次，在独立环境执行 |
 
-当前手工备份：
+执行备份：
 
 ```bash
-# 数据库
-docker compose -f docker-compose.yml exec -T postgres \
-  pg_dump -Fc -U "$POSTGRES_USER" "$POSTGRES_DB" > /srv/casehub/backups/database.dump
-
-# 文件（bind mount 场景）
-tar -C /srv/casehub/files -cf /srv/casehub/backups/files.tar .
-
-# named volume 场景
-docker run --rm -v casehub_file-storage:/data -v /srv/casehub/backups:/out \
-  alpine tar -cf /out/files.tar -C /data .
+cd deploy
+BACKUP_QUIESCE_CONFIRMED=true ./scripts/backup.sh
 ```
+
+恢复是破坏性操作，先在独立目标环境完成 manifest/checksum preflight：
+
+```bash
+RESTORE_CONFIRM=YES ./scripts/restore.sh /srv/casehub/backups/casehub-<timestamp>
+```
+
+恢复会停止 backend、重建数据库、替换文件卷并执行健康检查；它不会把任意目录
+当作备份，也不会在 checksum 不匹配时开始破坏性操作。
 
 ---
 
 ## 10. HTTPS
 
-V1 内网初期允许先跑 HTTP，生产正式推荐 HTTPS（`Deployment-Backup` 第 10-11 节）。
+生产强制使用 HTTPS。HTTP 仅用于 redirect，开发 HTTP 必须显式加载
+`docker-compose.override.yml`。
 
 > 切换到 HTTPS 时，必须把 `.env` 中的 `SPRING_PROFILES_ACTIVE` 改为 `prod`
 > （而非默认的 `prod,http`），否则会话 Cookie 仍是非 Secure，明文 Cookie 会随
@@ -294,12 +300,12 @@ V1 内网初期允许先跑 HTTP，生产正式推荐 HTTPS（`Deployment-Backup
 > `server.servlet.session.cookie.secure=true`。详见
 > `backend/src/main/resources/application-{prod,http}.yml`。
 
-启用步骤已在 `deploy/nginx/conf.d/casehub.conf` 的注释中给出，摘要：
+生产配置已启用 TLS，证书只在运行时挂载：
 
 1. 证书放 `/srv/casehub/certs/`（私钥禁止提交 Git）
-2. compose 中 nginx 增加 `- /srv/casehub/certs:/etc/nginx/certs:ro` 与 `443:443`
-3. 取消 `casehub.conf` 中 443 server 块的注释
-4. 全站 HTTPS 稳定后，在 `nginx.conf` 开启 HSTS
+2. `.env` 设置 `TLS_CERT_DIR=/srv/casehub/certs`
+3. 确保目录包含 `fullchain.pem` 与 `privkey.pem`
+4. `docker compose up --build -d`；HTTP 会 308 到 HTTPS，HSTS 只在 HTTPS 响应出现
 
 TLS 只启用 1.2 / 1.3（`Deployment-Backup` 第 12 节）。
 
@@ -337,12 +343,15 @@ evidence
 
 ---
 
-## 13. 已知待确认事项
+## 13. 已知限制与运维约束
 
 - `frontend/` 的包管理器：当前 `nginx.Dockerfile` 假定 **npm**（`package-lock.json` + `npm ci`）。
   若实际使用 pnpm / yarn，需要改 Dockerfile。
 - `backend/` 是否包含 Maven Wrapper：当前使用 Maven 官方镜像自带的 `mvn`。
-- `proxy_pass` 是否剥离 `/api` 前缀：当前**保留** `/api`，依据是后端 Spring Security
+- `proxy_pass` 保留 `/api` 前缀，依据是后端 Spring Security
   匹配路径写作 `/api/v1/**`。若后端配置了 `server.servlet.context-path=/api`，
   需改为 `proxy_pass http://casehub_backend/;`。
-- `client_max_body_size` 基线 100m，需与后端 `max-file-size` 对齐。
+- `client_max_body_size` 基线 100m，与后端 `CASEHUB_MAX_FILE_SIZE` 对齐。
+- 默认生产 compose 使用 named volumes；需要宿主机级备份浏览、权限监控或独立
+  文件校验时，应切换到 README 第 3 节的 bind mount。
+- Batch 6 不包含 Phase 29/30 的最终 Playwright 验收、发布候选批准或 release review。
