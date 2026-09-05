@@ -24,7 +24,7 @@ compose() {
 }
 [[ "${RESTORE_CONFIRM:-}" == "YES" ]] || fail "set RESTORE_CONFIRM=YES for destructive restore"
 [[ -n "$BACKUP_DIR" && -d "$BACKUP_DIR" ]] || fail "backup directory is required"
-BACKUP_ROOT="${BACKUP_ROOT:-$(dirname "$BACKUP_DIR")}" 
+BACKUP_ROOT="${BACKUP_ROOT:-$(dirname "$BACKUP_DIR")}"
 [[ "$BACKUP_DIR" == "$BACKUP_ROOT"/casehub-* ]] || fail "backup must be a casehub backup child"
 [[ -f "$BACKUP_DIR/manifest.txt" && -f "$BACKUP_DIR/database.dump" && -f "$BACKUP_DIR/file-storage.tar" ]] \
   || fail "backup set is incomplete"
