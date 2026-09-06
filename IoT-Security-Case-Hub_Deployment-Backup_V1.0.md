@@ -582,7 +582,7 @@ memory limit
 Spring Boot Actuator
 ```
 
-至少：
+生产基线使用：
 
 ```text
 /actuator/health
@@ -821,9 +821,11 @@ postgres/
 至少：
 
 ```text
-dev
-test
 prod
+
+显式本地 HTTP 调试才叠加：
+
+prod,http
 ```
 
 ---
@@ -854,8 +856,7 @@ DB_PASSWORD
 CASEHUB_STORAGE_ROOT
 CASEHUB_MAX_FILE_SIZE
 
-CASEHUB_INITIAL_ADMIN_USERNAME
-CASEHUB_INITIAL_ADMIN_PASSWORD
+CASEHUB_BOOTSTRAP_ADMIN_PASSWORD
 
 SERVER_PORT
 ```
@@ -960,13 +961,14 @@ Vault
 
 # 47. Admin Password
 
-初始 Admin：
+V1 初始 Admin：
 
 ```text
-must_change_password = true
+must_change_password = false
 ```
 
-首次登录修改。
+V1 不强制首次登录修改密码。操作员应使用强随机 bootstrap 密码初始化首个
+Admin，按组织策略主动轮换，随后从运行时环境中移除该变量。
 
 ---
 

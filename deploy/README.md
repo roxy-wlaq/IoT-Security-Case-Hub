@@ -2,7 +2,7 @@
 
 > 依据：`IoT-Security-Case-Hub_Deployment-Backup_V1.0.md`、`IoT-Security-Case-Hub_Final-Technical-Review_V1.0.md`
 >
-> 版本：V1 Phase 1 部署基线
+> 版本：V1.0.0 release candidate deployment baseline
 
 ---
 
@@ -139,8 +139,8 @@ chmod 600 .env
 
 `SPRING_PROFILES_ACTIVE`（会话 Cookie 安全 / HTTP·HTTPS 部署）：
 
-- 默认 `prod,http` → 纯 HTTP 部署，会话 Cookie 设为 non-Secure（无 TLS 必须）
-- HTTPS 部署（nginx 终止 TLS）改为 `prod` → 会话 Cookie 保持 Secure(secure=true)
+- 生产 HTTPS（Nginx 终止 TLS）固定使用 `prod` → 会话 Cookie 保持 Secure（`secure=true`）
+- 显式开发/本地纯 HTTP 调试才使用 `prod,http`（通过 `docker-compose.override.yml`）→ 会话 Cookie 为 non-Secure
 - `http` profile 仅覆盖 `server.servlet.session.cookie.secure=false`，不改动
   Actuator / Security / CSRF 配置（见 `backend/src/main/resources/application-{prod,http}.yml`）
 - `dev` profile **不是**受支持的部署默认值（它会暴露全部 Actuator）
@@ -148,8 +148,8 @@ chmod 600 .env
 `CASEHUB_BOOTSTRAP_ADMIN_PASSWORD` 行为（`Deployment-Backup` 第 45-47 节）：
 
 - 仅当系统中**不存在任何 ADMIN 用户**时创建初始管理员
-- 创建后该账号 `must_change_password = true`，首次登录必须改密码
-- **首次启动后请立即登录修改密码，并从 `.env` 中移除该变量**
+- 创建后该账号 `must_change_password = false`；V1 不强制首次登录改密
+- 操作员应使用强随机密码初始化首个 Admin，登录后按组织策略主动轮换密码，并从 `.env` 中移除该变量
 
 上传大小三处必须一致：
 
@@ -157,9 +157,9 @@ chmod 600 .env
 | --- | --- |
 | `deploy/nginx/nginx.conf` → `client_max_body_size` | `100m` |
 | `.env` → `CASEHUB_MAX_FILE_SIZE` | `100MB` |
-| 后端 `spring.servlet.multipart.max-file-size` | 需 Agent A 对齐 |
+| 后端 `spring.servlet.multipart.max-file-size` / `max-request-size` | `${CASEHUB_MAX_FILE_SIZE}`（默认 `100MB`） |
 
-> `Deployment-Backup` 第 16 节建议 Evidence 场景 500m。Phase 1 先按保守基线 100m；
+> `Deployment-Backup` 第 16 节建议 Evidence 场景 500m。V1 保持保守基线 100MB；
 > 放开时三处必须同时调整，否则会出现 Nginx 413 或后端报错。
 
 ---
@@ -317,9 +317,8 @@ RESTORE_CONFIRM=YES ./scripts/restore.sh /srv/casehub/backups/casehub-<timestamp
 生产强制使用 HTTPS。HTTP 仅用于 redirect，开发 HTTP 必须显式加载
 `docker-compose.override.yml`。
 
-> 切换到 HTTPS 时，必须把 `.env` 中的 `SPRING_PROFILES_ACTIVE` 改为 `prod`
-> （而非默认的 `prod,http`），否则会话 Cookie 仍是非 Secure，明文 Cookie 会随
-> HTTP 泄露。`http` profile 仅用于无 TLS 的纯 HTTP 场景；`prod` 才会让
+> 生产 HTTPS 的 `.env` 使用 `SPRING_PROFILES_ACTIVE=prod`。`prod,http`
+> 仅用于显式的无 TLS 本地调试；它会让会话 Cookie 变为非 Secure。`prod` 才会让
 > `server.servlet.session.cookie.secure=true`。详见
 > `backend/src/main/resources/application-{prod,http}.yml`。
 
