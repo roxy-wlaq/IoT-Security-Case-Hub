@@ -25,6 +25,7 @@ import { CapabilityRequestPage } from '@/features/change/pages/CapabilityRequest
 import { TestCaseChangeRequestPage } from '@/features/change/pages/TestCaseChangeRequestPage';
 import { VersionUpgradePage } from '@/features/upgrade/pages/VersionUpgradePage';
 import { AuditPage } from '@/features/audit/pages/AuditPage';
+import { UserAdminPage } from '@/features/user/pages/UserPage';
 
 /**
  * 已实现模块的页面映射（Phase 4 基础字典 / Phase 5 能力库）。
@@ -41,6 +42,7 @@ const pageComponents: Record<string, ComponentType> = {
   '/generation-rules': GenerationRulePage,
   '/my-tests': MyTestsPage,
   '/audit-logs': AuditPage,
+  '/users': UserAdminPage,
 };
 
 const protectedRoutes = [

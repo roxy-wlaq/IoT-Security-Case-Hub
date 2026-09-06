@@ -4,10 +4,13 @@ package com.company.casehub.audit.entity;
  * Frozen Batch 5 (Phase 26) audit event catalog. One enum value per governance
  * event; the V018 CHECK constraint mirrors this list.
  *
- * <p>ROLE_CHANGE is part of the frozen catalog: the only authoritative role
- * mutation point in V1 is the bootstrap ADMIN creation ({@code BootstrapUserService});
- * no interactive role-management workflow exists yet, so no other production
- * call site emits this event.</p>
+ * <p>ROLE_CHANGE is part of the frozen catalog. The bootstrap ADMIN creation
+ * ({@code BootstrapUserService}) and the interactive role-assignment workflow
+ * ({@code UserManagementService}) both emit it.</p>
+ *
+ * <p>The USER_* values (V019) cover the admin user-management module: user
+ * creation, profile update, enable / disable and password reset. Role
+ * assignment itself keeps using ROLE_CHANGE.</p>
  */
 public enum AuditAction {
     LOGIN,
@@ -19,5 +22,10 @@ public enum AuditAction {
     TEST_CASE_DEPRECATE,
     GENERATION_RULE_UPDATE,
     CAPABILITY_LIBRARY_UPDATE,
-    EVIDENCE_DELETE
+    EVIDENCE_DELETE,
+    USER_CREATE,
+    USER_UPDATE,
+    USER_ENABLE,
+    USER_DISABLE,
+    USER_PASSWORD_RESET
 }

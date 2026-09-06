@@ -1,7 +1,7 @@
 import { httpClient } from '@/shared/api/httpClient';
 import type { PagedResponse } from '@/shared/types/testCase';
 
-export const AUDIT_ACTIONS = ['LOGIN', 'LOGIN_FAILURE', 'ROLE_CHANGE', 'PROJECT_CREATE', 'PROJECT_ARCHIVE', 'TEST_CASE_PUBLISH', 'TEST_CASE_DEPRECATE', 'GENERATION_RULE_UPDATE', 'CAPABILITY_LIBRARY_UPDATE', 'EVIDENCE_DELETE'] as const;
+export const AUDIT_ACTIONS = ['LOGIN', 'LOGIN_FAILURE', 'ROLE_CHANGE', 'PROJECT_CREATE', 'PROJECT_ARCHIVE', 'TEST_CASE_PUBLISH', 'TEST_CASE_DEPRECATE', 'GENERATION_RULE_UPDATE', 'CAPABILITY_LIBRARY_UPDATE', 'EVIDENCE_DELETE', 'USER_CREATE', 'USER_UPDATE', 'USER_ENABLE', 'USER_DISABLE', 'USER_PASSWORD_RESET'] as const;
 export type AuditAction = typeof AUDIT_ACTIONS[number];
 export interface AuditLog {
   id: string;

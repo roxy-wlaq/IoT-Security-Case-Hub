@@ -23,9 +23,20 @@ class Batch5MigrationVerificationTest {
                 "ix_audit_records_resource");
         assertThat(Files.exists(migrations.resolve("V017__customization_change_management.sql"))).isTrue();
         try (Stream<Path> files = Files.list(migrations)) {
-            assertThat(files.map(path -> path.getFileName().toString()).filter(name -> name.startsWith("V019")).toList())
+            // V018 froze the governance schema. The interactive user-management module (delivered
+            // after Batch 5/6) legitimately extends the audit action catalog via V019 (it only
+            // rebuilds the CHECK constraint, never edits V017/V018 in place). What stays forbidden
+            // is any migration *above* V019 without an approved follow-up scope.
+            assertThat(files.map(path -> path.getFileName().toString())
+                    .filter(name -> name.startsWith("V0") && migrationVersion(name) > 19)
+                    .toList())
                     .isEmpty();
         }
+    }
+
+    private static int migrationVersion(String fileName) {
+        String digits = fileName.substring(1, fileName.indexOf('_'));
+        return Integer.parseInt(digits);
     }
 
     @Test

@@ -19,6 +19,12 @@ public enum ErrorCode {
     PASSWORD_POLICY_VIOLATION(HttpStatus.BAD_REQUEST, "Password does not satisfy the policy requirements."),
     AUTH_CURRENT_PASSWORD_MISMATCH(HttpStatus.BAD_REQUEST, "The current password is incorrect."),
 
+    // ---- User Management (admin user administration) ----
+    USER_NOT_FOUND(HttpStatus.NOT_FOUND, "User not found."),
+    USER_USERNAME_DUPLICATE(HttpStatus.CONFLICT, "Username already exists."),
+    USER_ROLE_INVALID(HttpStatus.BAD_REQUEST, "One or more roles are invalid."),
+    USER_SELF_OPERATION_FORBIDDEN(HttpStatus.FORBIDDEN, "You cannot perform this action on your own account."),
+
     // ---- Dictionary (Phase 4) ----
     STANDARD_NOT_FOUND(HttpStatus.NOT_FOUND, "Standard/Task Type not found."),
     STANDARD_CODE_DUPLICATE(HttpStatus.CONFLICT, "Standard/Task Type code already exists."),
