@@ -1,6 +1,5 @@
-import { zodResolver } from '@hookform/resolvers/zod';
 import { Alert, Button, Form, Input } from 'antd';
-import { useForm } from 'react-hook-form';
+import { useState, type FormEvent } from 'react';
 import { useLogin } from '@/features/auth/hooks/useLogin';
 import { loginSchema } from '@/features/auth/schemas/authSchemas';
 import type { LoginFormValues } from '@/features/auth/schemas/authSchemas';
@@ -15,30 +14,37 @@ const DEFAULT_VALUES: LoginFormValues = { username: '', password: '' };
 
 export function LoginForm({ onSuccess }: LoginFormProps) {
   const loginMutation = useLogin();
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-  } = useForm<LoginFormValues>({
-    resolver: zodResolver(loginSchema),
-    defaultValues: DEFAULT_VALUES,
-    mode: 'onSubmit',
-  });
+  const [values, setValues] = useState<LoginFormValues>(DEFAULT_VALUES);
+  const [errors, setErrors] = useState<Partial<Record<keyof LoginFormValues, string>>>({});
 
   const submitError = loginMutation.error ? toApiError(loginMutation.error) : null;
 
-  const onSubmit = handleSubmit(async (values) => {
+  const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const parsed = loginSchema.safeParse(values);
+    if (!parsed.success) {
+      const nextErrors: Partial<Record<keyof LoginFormValues, string>> = {};
+      for (const issue of parsed.error.issues) {
+        const field = issue.path[0];
+        if ((field === 'username' || field === 'password') && !nextErrors[field]) {
+          nextErrors[field] = issue.message;
+        }
+      }
+      setErrors(nextErrors);
+      return;
+    }
+    setErrors({});
     loginMutation.reset();
     try {
-      const user = await loginMutation.mutateAsync(values);
+      const user = await loginMutation.mutateAsync(parsed.data);
       onSuccess?.(user);
     } catch {
       // 错误信息已由 loginMutation.error 承载，在此处吞掉以避免 unhandled rejection
     }
-  });
+  };
 
   return (
-    <Form layout="vertical" onFinish={onSubmit} requiredMark={false} disabled={loginMutation.isPending}>
+    <form className="ant-form ant-form-vertical ant-form-hide-required-mark" onSubmit={onSubmit}>
       {submitError ? (
         <Form.Item style={{ marginBottom: 16 }}>
           <Alert
@@ -57,27 +63,45 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
       <Form.Item
         label="用户名"
         validateStatus={errors.username ? 'error' : undefined}
-        help={errors.username?.message}
+        help={errors.username}
         required
       >
-        <Input {...register('username')} autoComplete="username" placeholder="请输入用户名" autoFocus />
+        <Input
+          name="username"
+          value={values.username}
+          onChange={(event) => setValues((current) => ({ ...current, username: event.target.value }))}
+          autoComplete="username"
+          placeholder="请输入用户名"
+          autoFocus
+        />
       </Form.Item>
 
       <Form.Item
         label="密码"
         validateStatus={errors.password ? 'error' : undefined}
-        help={errors.password?.message}
+        help={errors.password}
         required
       >
-        <Input.Password {...register('password')} autoComplete="current-password" placeholder="请输入密码" />
+        <Input.Password
+          name="password"
+          value={values.password}
+          onChange={(event) => setValues((current) => ({ ...current, password: event.target.value }))}
+          autoComplete="current-password"
+          placeholder="请输入密码"
+        />
       </Form.Item>
 
       <Form.Item style={{ marginBottom: 0 }}>
-        <Button type="primary" htmlType="submit" block loading={loginMutation.isPending}>
+        <Button
+          type="primary"
+          htmlType="submit"
+          block
+          loading={loginMutation.isPending}
+        >
           登录
         </Button>
       </Form.Item>
-    </Form>
+    </form>
   );
 }
 

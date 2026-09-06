@@ -57,6 +57,9 @@ deploy/runtime/
 # OS / IDE
 # ---------------------------------------------------------------------------
 .DS_Store
+frontend/e2e/.state.json
+frontend/playwright-report/
+frontend/test-results/
 Thumbs.db
 .idea/
 *.iml

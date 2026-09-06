@@ -1,0 +1,39 @@
+{
+  "standardTaskTypeId": "00000000-0000-0000-0000-000000000000",
+  "categoryId": "00000000-0000-0000-0000-000000000000",
+  "fullProfile": {
+    "projectId": "00000000-0000-0000-0000-000000000000",
+    "projectTestCaseId": "00000000-0000-0000-0000-000000000000"
+  },
+  "progressiveBluetooth": {
+    "projectId": "00000000-0000-0000-0000-000000000000",
+    "entryProjectTestCaseId": "00000000-0000-0000-0000-000000000000"
+  },
+  "multiPredecessor": {
+    "projectId": "00000000-0000-0000-0000-000000000000",
+    "predecessorAProjectTestCaseId": "00000000-0000-0000-0000-000000000000",
+    "predecessorBProjectTestCaseId": "00000000-0000-0000-0000-000000000000",
+    "targetProjectTestCaseId": "00000000-0000-0000-0000-000000000000"
+  },
+  "floating": {
+    "projectId": "00000000-0000-0000-0000-000000000000",
+    "sourceProjectTestCaseId": "00000000-0000-0000-0000-000000000000",
+    "targetProjectTestCaseId": "00000000-0000-0000-0000-000000000000"
+  },
+  "capabilityRequest": {
+    "projectId": "00000000-0000-0000-0000-000000000000",
+    "capabilityId": "00000000-0000-0000-0000-000000000000"
+  },
+  "changeRequest": {
+    "masterTestCaseId": "00000000-0000-0000-0000-000000000000",
+    "sourceVersionId": "00000000-0000-0000-0000-000000000000"
+  },
+  "versionUpgrade": {
+    "projectTestCaseId": "00000000-0000-0000-0000-000000000000",
+    "oldVersionId": "00000000-0000-0000-0000-000000000000",
+    "newVersionId": "00000000-0000-0000-0000-000000000000"
+  },
+  "customCase": {
+    "projectId": "00000000-0000-0000-0000-000000000000"
+  }
+}
