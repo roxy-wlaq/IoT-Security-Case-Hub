@@ -2,7 +2,7 @@
 # host ports, project-specific container names, and runtime test certificate path.
 services:
   nginx:
-    container_name: casehub-e2e-nginx
+    container_name: "${E2E_COMPOSE_PROJECT:-casehub-e2e}-nginx"
     ports:
       - "${E2E_HTTP_PORT:-8081}:80"
       - "${E2E_HTTPS_PORT:-8443}:443"
@@ -10,10 +10,10 @@ services:
       - "${E2E_TLS_CERT_DIR:-/tmp/casehub-e2e-certs}:/etc/nginx/certs:ro"
 
   backend:
-    container_name: casehub-e2e-backend
+    container_name: "${E2E_COMPOSE_PROJECT:-casehub-e2e}-backend"
     environment:
       SPRING_PROFILES_ACTIVE: prod
 
   postgres:
-    container_name: casehub-e2e-postgres
+    container_name: "${E2E_COMPOSE_PROJECT:-casehub-e2e}-postgres"
     ports: []

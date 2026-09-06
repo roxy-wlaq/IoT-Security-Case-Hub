@@ -4,7 +4,10 @@ set -Eeuo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 
+source "$ROOT_DIR/deploy/scripts/e2e-project-guard.sh"
+
 E2E_PROJECT="${E2E_COMPOSE_PROJECT:-casehub-e2e}"
+validate_e2e_project_name "$E2E_PROJECT"
 E2E_CERT_DIR="${E2E_TLS_CERT_DIR:-${TMPDIR:-/tmp}/casehub-e2e-certs}"
 E2E_HTTP_PORT="${E2E_HTTP_PORT:-8081}"
 E2E_HTTPS_PORT="${E2E_HTTPS_PORT:-8443}"

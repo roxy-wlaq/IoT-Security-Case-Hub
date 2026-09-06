@@ -21,6 +21,10 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
 
   const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (loginMutation.isPending) {
+      return;
+    }
+
     const parsed = loginSchema.safeParse(values);
     if (!parsed.success) {
       const nextErrors: Partial<Record<keyof LoginFormValues, string>> = {};
@@ -69,6 +73,7 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
         <Input
           name="username"
           value={values.username}
+          disabled={loginMutation.isPending}
           onChange={(event) => setValues((current) => ({ ...current, username: event.target.value }))}
           autoComplete="username"
           placeholder="请输入用户名"
@@ -85,6 +90,7 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
         <Input.Password
           name="password"
           value={values.password}
+          disabled={loginMutation.isPending}
           onChange={(event) => setValues((current) => ({ ...current, password: event.target.value }))}
           autoComplete="current-password"
           placeholder="请输入密码"
@@ -97,6 +103,7 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
           htmlType="submit"
           block
           loading={loginMutation.isPending}
+          disabled={loginMutation.isPending}
         >
           登录
         </Button>
