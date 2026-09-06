@@ -5,6 +5,7 @@ import java.time.Instant;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.convert.DurationStyle;
 import org.springframework.stereotype.Component;
 
 /**
@@ -23,17 +24,14 @@ public class LoginAttemptService {
 
     private final Map<String, Attempt> attempts = new ConcurrentHashMap<>();
 
-    public LoginAttemptService() {
-        this(5, Duration.ofMinutes(15));
-    }
-
     public LoginAttemptService(@Value("${casehub.security.login.max-failures:5}") int maxAttempts,
-                               @Value("${casehub.security.login.block-duration:15m}") Duration blockDuration) {
-        if (maxAttempts < 1 || blockDuration.isNegative() || blockDuration.isZero()) {
+                               @Value("${casehub.security.login.block-duration:15m}") String blockDuration) {
+        Duration parsedBlockDuration = DurationStyle.detectAndParse(blockDuration);
+        if (maxAttempts < 1 || parsedBlockDuration.isNegative() || parsedBlockDuration.isZero()) {
             throw new IllegalArgumentException("Login throttling configuration must be positive");
         }
         this.maxAttempts = maxAttempts;
-        this.blockDuration = blockDuration;
+        this.blockDuration = parsedBlockDuration;
     }
 
     private record Attempt(int count, Instant blockedUntil) {

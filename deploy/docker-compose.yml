@@ -30,7 +30,7 @@ services:
     build:
       context: ..
       dockerfile: deploy/nginx.Dockerfile
-    image: casehub-nginx:1.0.0
+    image: ${CASEHUB_NGINX_IMAGE:-casehub-nginx:1.0.0}
     container_name: casehub-nginx
     depends_on:
       backend:
@@ -61,7 +61,7 @@ services:
     build:
       context: ..
       dockerfile: deploy/backend.Dockerfile
-    image: casehub-backend:1.0.0
+    image: ${CASEHUB_BACKEND_IMAGE:-casehub-backend:1.0.0}
     container_name: casehub-backend
     depends_on:
       postgres:

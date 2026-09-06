@@ -41,7 +41,7 @@ deploy/
 ├─ .env.example                  环境变量模板（唯一允许提交的环境文件）
 ├─ README.md                     本文件
 ├─ scripts/                      health / backup / restore / upgrade / rollback
-├─ tests/                        deployment contract checks
+├─ tests/                        deployment and lifecycle contract checks
 └─ nginx/
    ├─ nginx.conf                 worker / gzip / 安全头 / 限流 zone
    └─ conf.d/
@@ -209,12 +209,14 @@ docker compose -f docker-compose.yml -f docker-compose.override.yml config
 生产禁止使用 `latest`（`Deployment-Backup` 第 85 节、`Final Technical Review` 第 36 节）。
 
 ```text
-casehub-backend:1.0.0
-casehub-nginx:1.0.0
+CASEHUB_BACKEND_IMAGE=casehub-backend:1.0.0
+CASEHUB_NGINX_IMAGE=casehub-nginx:1.0.0
 postgres:16.6-alpine
 ```
 
-发布新版本：修改 `docker-compose.yml` 中 `image:` 的版本号，重新 `up --build`。
+每个发布版本必须使用不可变的 backend/nginx image reference。发布新版本时更新 `.env`
+中的两个 `CASEHUB_*_IMAGE`，并使用 `upgrade.sh` 构建/加载该 release；不要复用一个
+可变 tag 表示多个 release。
 
 ---
 
@@ -225,9 +227,9 @@ postgres:16.6-alpine
 ```text
 1. 阅读 Release Notes，确认是否有破坏性 Migration
 2. 备份 DB + File Storage
-3. 停 backend
-4. 构建 / 加载新镜像
-5. 启动 backend（Flyway 自动 migrate）
+3. 停止 backend，并在备份成功后保持停止
+4. 构建 / 加载新 release image
+5. 启动新 backend（Flyway 自动 migrate）
 6. 健康检查 + 冒烟测试
 ```
 
@@ -243,8 +245,24 @@ Evidence 下载
 
 回滚（`Deployment-Backup` 第 90-95 节）：
 
-- 无破坏性 Migration：直接切回旧镜像 tag
-- 有破坏性 Migration：必须恢复升级前的备份（Flyway Community 无自动 down migration）
+- Minor rollback（schema-compatible）：设置旧的 `PREVIOUS_BACKEND_IMAGE` 与
+  `PREVIOUS_NGINX_IMAGE`，停止当前服务后切换并启动旧 release。
+- Major rollback（schema-incompatible）：同时设置 `RESTORE_BACKUP_DIR`；脚本先停止当前
+  backend、恢复 DB + File Storage 且不启动当前 backend，再以两个 previous image 启动旧
+  release。Flyway Community 无自动 down migration。
+
+示例：
+
+```bash
+PREVIOUS_BACKEND_IMAGE=casehub-backend:1.0.0 \
+PREVIOUS_NGINX_IMAGE=casehub-nginx:1.0.0 \
+ROLLBACK_CONFIRM=YES ./scripts/rollback.sh
+
+PREVIOUS_BACKEND_IMAGE=casehub-backend:1.0.0 \
+PREVIOUS_NGINX_IMAGE=casehub-nginx:1.0.0 \
+RESTORE_BACKUP_DIR=/srv/casehub/backups/casehub-upgrade-<timestamp> \
+ROLLBACK_CONFIRM=YES ./scripts/rollback.sh
+```
 
 ---
 
@@ -258,7 +276,12 @@ Evidence 下载
 数据库和文件必须在同一个写暂停窗口内备份。独立执行备份时，操作者必须先停止
 backend 并设置 `BACKUP_QUIESCE_CONFIRMED=true`；也可以提供
 `BACKUP_QUIESCE_CMD` 与 `BACKUP_RESUME_CMD`。`upgrade.sh` 使用
-`BACKUP_MANAGE_COMPOSE=true` 自动停止并恢复 backend。
+`BACKUP_MANAGE_COMPOSE=true` 自动停止 backend；升级成功前不会恢复旧 backend。
+独立 backup 默认仍可在成功后按 `BACKUP_RESUME_CMD` 恢复服务。
+
+脚本从有效 PostgreSQL 容器配置读取 `POSTGRES_DB` / `POSTGRES_USER`，不假定默认的
+`casehub` / `casehub`，并把 database name/user 写入 manifest。恢复前会校验 manifest
+与当前目标配置一致，再执行任何破坏性操作。
 
 设计基线：
 

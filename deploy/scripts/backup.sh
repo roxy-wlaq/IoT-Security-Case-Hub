@@ -10,12 +10,12 @@ BACKUP_ROOT="${BACKUP_ROOT:-/srv/casehub/backups}"
 FILE_STORAGE_PATH="${FILE_STORAGE_PATH:-}"
 FILE_STORAGE_CONTAINER="${FILE_STORAGE_CONTAINER:-casehub-backend}"
 DB_SERVICE="${DB_SERVICE:-postgres}"
-DB_NAME="${POSTGRES_DB:-${DB_NAME:-casehub}}"
-DB_USER="${POSTGRES_USER:-${DB_USER:-casehub}}"
 QUIESCE_CMD="${BACKUP_QUIESCE_CMD:-}"
 RESUME_CMD="${BACKUP_RESUME_CMD:-}"
+BACKUP_KEEP_BACKEND_STOPPED="${BACKUP_KEEP_BACKEND_STOPPED:-false}"
 
 fail() { echo "backup failed: $*" >&2; exit 1; }
+source "$SCRIPT_DIR/common.sh"
 compose() {
   if [[ -f "$COMPOSE_ENV_FILE" ]]; then
     docker compose --env-file "$COMPOSE_ENV_FILE" -f "$COMPOSE_FILE" "$@"
@@ -33,6 +33,7 @@ fi
 [[ "${BACKUP_QUIESCE_CONFIRMED:-false}" == "true" || -n "$QUIESCE_CMD" ]] \
   || fail "confirm the write-quiescence window with BACKUP_QUIESCE_CONFIRMED=true or BACKUP_QUIESCE_CMD"
 [[ -z "$QUIESCE_CMD" || -n "$RESUME_CMD" ]] || fail "BACKUP_RESUME_CMD is required with BACKUP_QUIESCE_CMD"
+resolve_database_identity
 
 mkdir -p "$BACKUP_ROOT"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
@@ -42,8 +43,10 @@ DEST="${1:-$BACKUP_ROOT/casehub-$STAMP}"
 mkdir -p "$DEST"
 
 resumed=false
+backup_complete=false
 cleanup() {
-  if [[ "$resumed" == false && -n "$RESUME_CMD" ]]; then
+  if [[ "$resumed" == false && -n "$RESUME_CMD" \
+        && ("$BACKUP_KEEP_BACKEND_STOPPED" != true || "$backup_complete" != true) ]]; then
     sh -c "$RESUME_CMD" || echo "WARNING: resume command failed; writes may remain paused" >&2
     resumed=true
   fi
@@ -87,6 +90,8 @@ FILES_HASH="$(sha256 "$DEST/file-storage.tar")"
   printf 'file_storage=file-storage.tar\n'
   printf 'file_storage_sha256=%s\n' "$FILES_HASH"
   printf 'database_name=%s\n' "$DB_NAME"
+  printf 'database_user=%s\n' "$DB_USER"
 } > "$DEST/manifest.txt"
 sync
+backup_complete=true
 echo "backup created: $DEST"

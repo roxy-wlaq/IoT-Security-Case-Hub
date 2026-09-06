@@ -2,11 +2,12 @@ package com.company.casehub.auth.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.time.Duration;
 import org.junit.jupiter.api.Test;
 
 class LoginAttemptServiceTest {
 
-    private final LoginAttemptService service = new LoginAttemptService();
+    private final LoginAttemptService service = new LoginAttemptService(5, "15m");
 
     @Test
     void notBlockedBeforeThreshold() {

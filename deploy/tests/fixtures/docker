@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+log="${FAKE_DOCKER_LOG:?FAKE_DOCKER_LOG is required}"
+env_file="${FAKE_DOCKER_ENV_FILE:?FAKE_DOCKER_ENV_FILE is required}"
+printf 'CASEHUB_BACKEND_IMAGE=%s CASEHUB_NGINX_IMAGE=%s %s\n' \
+  "${CASEHUB_BACKEND_IMAGE:-}" "${CASEHUB_NGINX_IMAGE:-}" "$*" >> "$log"
+
+if [[ "${1:-}" == inspect ]]; then
+  db_name="$(sed -n 's/^POSTGRES_DB=//p' "$env_file")"
+  db_user="$(sed -n 's/^POSTGRES_USER=//p' "$env_file")"
+  printf 'POSTGRES_DB=%s\nPOSTGRES_USER=%s\n' "$db_name" "$db_user"
+  exit 0
+fi
+
+if [[ "${1:-}" == compose ]]; then
+  if printf '%s\n' "$*" | grep -Eq '(^| )ps -aq( |$)'; then
+    printf 'fixture-postgres-container\n'
+  elif printf '%s\n' "$*" | grep -Fq ' exec '; then
+    printf 'fixture database dump\n'
+  fi
+fi

@@ -9,11 +9,11 @@ COMPOSE_ENV_FILE="${COMPOSE_ENV_FILE:-$DEPLOY_DIR/.env}"
 FILE_STORAGE_PATH="${FILE_STORAGE_PATH:-}"
 FILE_STORAGE_CONTAINER="${FILE_STORAGE_CONTAINER:-casehub-backend}"
 DB_SERVICE="${DB_SERVICE:-postgres}"
-DB_NAME="${POSTGRES_DB:-${DB_NAME:-casehub}}"
-DB_USER="${POSTGRES_USER:-${DB_USER:-casehub}}"
 BACKUP_DIR="${1:-}"
+RESTORE_START_BACKEND="${RESTORE_START_BACKEND:-true}"
 
 fail() { echo "restore failed: $*" >&2; exit 1; }
+source "$SCRIPT_DIR/common.sh"
 compose() {
   if [[ -f "$COMPOSE_ENV_FILE" ]]; then
     docker compose --env-file "$COMPOSE_ENV_FILE" -f "$COMPOSE_FILE" "$@"
@@ -33,12 +33,19 @@ if [[ -n "$FILE_STORAGE_PATH" ]]; then
 else
   docker inspect "$FILE_STORAGE_CONTAINER" >/dev/null 2>&1 || fail "FILE_STORAGE_CONTAINER does not exist"
 fi
+resolve_database_identity
 
 sha256() {
   if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" | awk '{print $1}'; else sha256sum "$1" | awk '{print $1}'; fi
 }
 expected_db="$(sed -n 's/^database_sha256=//p' "$BACKUP_DIR/manifest.txt")"
 expected_files="$(sed -n 's/^file_storage_sha256=//p' "$BACKUP_DIR/manifest.txt")"
+manifest_db_name="$(manifest_value database_name "$BACKUP_DIR/manifest.txt")"
+manifest_db_user="$(manifest_value database_user "$BACKUP_DIR/manifest.txt")"
+[[ "$manifest_db_name" == "$DB_NAME" ]] || fail "backup database does not match effective target database"
+# Older V1 manifests did not record the user; new manifests do and must match.
+[[ -z "$manifest_db_user" || "$manifest_db_user" == "$DB_USER" ]] \
+  || fail "backup database user does not match effective target user"
 [[ -n "$expected_db" && "$expected_db" == "$(sha256 "$BACKUP_DIR/database.dump")" ]] || fail "database checksum mismatch"
 [[ -n "$expected_files" && "$expected_files" == "$(sha256 "$BACKUP_DIR/file-storage.tar")" ]] || fail "file storage checksum mismatch"
 [[ "$(sed -n 's/^format=//p' "$BACKUP_DIR/manifest.txt")" == casehub-backup-v1 ]] || fail "unsupported backup format"
@@ -65,8 +72,10 @@ else
     sh -c 'find /data/casehub -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +; tar -C /data/casehub -xf -' \
     < "$BACKUP_DIR/file-storage.tar"
 fi
-compose up -d backend
-if [[ "${RESTORE_VERIFY_HEALTH:-true}" == "true" ]]; then
+if [[ "$RESTORE_START_BACKEND" == true ]]; then
+  compose up -d backend
+fi
+if [[ "$RESTORE_START_BACKEND" == true && "${RESTORE_VERIFY_HEALTH:-true}" == "true" ]]; then
   CASEHUB_BASE_URL="${CASEHUB_BASE_URL:-https://localhost}" \
   CASEHUB_INSECURE_TLS="${CASEHUB_INSECURE_TLS:-false}" "$SCRIPT_DIR/health-check.sh"
 fi
