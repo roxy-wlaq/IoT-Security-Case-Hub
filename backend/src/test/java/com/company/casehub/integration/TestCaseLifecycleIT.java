@@ -34,6 +34,7 @@ import com.company.casehub.testcase.service.TestCaseDraftService;
 import com.company.casehub.testcase.service.DecisionPointService;
 import com.company.casehub.testcase.service.TestCaseLifecycleService;
 import com.company.casehub.testcase.service.TestCaseQueryService;
+import com.company.casehub.testcase.service.TestCaseAccessPolicy;
 import com.company.casehub.user.entity.UserEntity;
 import com.company.casehub.user.repository.UserRepository;
 import java.util.Comparator;
@@ -57,6 +58,7 @@ class TestCaseLifecycleIT extends AbstractIntegrationTest {
     @Autowired private TestCaseDraftService draftService;
     @Autowired private TestCaseLifecycleService lifecycleService;
     @Autowired private TestCaseQueryService queryService;
+    @Autowired private TestCaseAccessPolicy accessPolicy;
     @Autowired private DecisionPointService decisionPointService;
     @Autowired private UserRepository userRepository;
     @Autowired private CategoryRepository categoryRepository;
@@ -203,6 +205,13 @@ class TestCaseLifecycleIT extends AbstractIntegrationTest {
     // -------------------------------------------------------------------------
     // Full lifecycle: Draft → Review → Published → Deprecated
     // -------------------------------------------------------------------------
+
+    @Test
+    void preAuthorizationCanInspectDetachedDraftAggregateBeforeSubmitReview() {
+        TestCaseDetailResponse created = createDraft("LC-PREAUTH-" + UUID.randomUUID().toString().substring(0, 8), "Pre-authorisation Draft");
+
+        assertThat(accessPolicy.canSubmitReviewById(created.id(), coordinatorPrincipal)).isTrue();
+    }
 
     @Test
     void fullLifecycleFromDraftToDeprecated() {

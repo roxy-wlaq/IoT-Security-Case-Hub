@@ -11,6 +11,7 @@ import java.util.Comparator;
 import java.util.Objects;
 import java.util.UUID;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Single source of truth for resource-level (row-level) lifecycle permissions.
@@ -144,6 +145,7 @@ public class TestCaseAccessPolicy {
      * A contributor's temporary edit right may satisfy the update-Draft gate
      * without the global {@code test_case:draft_edit} permission (HIGH-02).
      */
+    @Transactional(readOnly = true)
     public boolean canEditDraftById(UUID masterId, UserPrincipal principal) {
         return masterRepository.findById(masterId)
                 .flatMap(master -> master.getVersions().stream()
@@ -154,6 +156,7 @@ public class TestCaseAccessPolicy {
                 .orElse(false);
     }
 
+    @Transactional(readOnly = true)
     public boolean canEditDraftVersionById(UUID masterId, UUID versionId, UserPrincipal principal) {
         return masterRepository.findById(masterId)
                 .flatMap(master -> master.getVersions().stream()
@@ -168,6 +171,7 @@ public class TestCaseAccessPolicy {
      * Controller-level pre-authorization helper for Submit Review. This is
      * intentionally independent from {@link #canEditDraftById(UUID, UserPrincipal)}.
      */
+    @Transactional(readOnly = true)
     public boolean canSubmitReviewById(UUID masterId, UserPrincipal principal) {
         return masterRepository.findById(masterId)
                 .flatMap(master -> master.getVersions().stream()
