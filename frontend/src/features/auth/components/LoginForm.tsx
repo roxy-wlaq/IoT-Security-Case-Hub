@@ -25,7 +25,14 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
       return;
     }
 
-    const parsed = loginSchema.safeParse(values);
+    const formData = new FormData(event.currentTarget);
+    const formValues: LoginFormValues = {
+      username: formData.get('username')?.toString() ?? '',
+      password: formData.get('password')?.toString() ?? '',
+    };
+    setValues(formValues);
+
+    const parsed = loginSchema.safeParse(formValues);
     if (!parsed.success) {
       const nextErrors: Partial<Record<keyof LoginFormValues, string>> = {};
       for (const issue of parsed.error.issues) {
