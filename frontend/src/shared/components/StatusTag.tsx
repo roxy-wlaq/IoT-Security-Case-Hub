@@ -82,3 +82,32 @@ export function testCaseStatusMeta(
   }
   return TEST_CASE_STATUS_META[status];
 }
+
+/** Minimal antd token subset needed to resolve a tone to a raw colour. */
+interface ToneTokenShape {
+  colorSuccess: string;
+  colorWarning: string;
+  colorError: string;
+  colorInfo: string;
+  colorTextQuaternary: string;
+}
+
+/**
+ * Resolve a StatusTone to a raw colour from the active antd token, so custom
+ * visuals (distribution bars, dots, charts) match Tag colours in light + dark.
+ */
+export function toneTokenColor(token: ToneTokenShape, tone: StatusTone): string {
+  switch (tone) {
+    case 'success':
+      return token.colorSuccess;
+    case 'review':
+    case 'warning':
+      return token.colorWarning;
+    case 'danger':
+      return token.colorError;
+    case 'info':
+      return token.colorInfo;
+    default:
+      return token.colorTextQuaternary;
+  }
+}
