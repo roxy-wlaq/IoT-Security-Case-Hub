@@ -19,7 +19,7 @@ export function LoadingState({ tip = '加载中…', block = false }: LoadingSta
       }}
     >
       <Spin size="large" />
-      <span style={{ color: 'rgba(0, 0, 0, 0.45)' }}>{tip}</span>
+      <span style={{ color: 'var(--color-text-tertiary)' }}>{tip}</span>
     </div>
   );
 }

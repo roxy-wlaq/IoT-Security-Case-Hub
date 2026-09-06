@@ -18,10 +18,15 @@ body,
 }
 
 body {
-  background: #f0f2f5;
-  color: rgba(0, 0, 0, 0.88);
+  background: var(--color-bg-page);
+  color: var(--color-text-primary);
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 a {
   color: inherit;
+}
+
+::selection {
+  background: var(--color-brand-soft);
 }

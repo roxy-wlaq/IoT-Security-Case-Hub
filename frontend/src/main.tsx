@@ -2,6 +2,7 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import App from '@/App';
 import { bootstrapCsrf } from '@/shared/api/csrf';
+import '@/styles/tokens.css';
 import '@/styles/global.css';
 
 // 应用启动即让后端下发 CSRF Token Cookie（XSRF-TOKEN，HttpOnly=false），

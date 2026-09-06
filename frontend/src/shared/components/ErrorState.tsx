@@ -23,7 +23,7 @@ export function ErrorState({ error, onRetry, title = '加载失败', description
         <span>
           {subTitle}
           {apiError.traceId ? (
-            <span style={{ display: 'block', marginTop: 8, color: 'rgba(0, 0, 0, 0.45)' }}>traceId：{apiError.traceId}</span>
+            <span style={{ display: 'block', marginTop: 8, color: 'var(--color-text-tertiary)' }}>traceId：{apiError.traceId}</span>
           ) : null}
         </span>
       }

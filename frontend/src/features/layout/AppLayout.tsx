@@ -1,18 +1,28 @@
+import { Layout } from 'antd';
 import { Outlet } from 'react-router-dom';
 import { AppSider } from '@/features/layout/AppSider';
 import { AppHeader } from '@/features/layout/AppHeader';
 
+const { Content } = Layout;
+
 export function AppLayout() {
   return (
-    <div style={{ minHeight: '100vh', display: 'flex' }}>
+    <Layout style={{ minHeight: '100vh' }}>
       <AppSider />
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+      <Layout>
         <AppHeader />
-        <main style={{ flex: 1, padding: 24, overflow: 'auto' }}>
+        <Content
+          style={{
+            flex: 1,
+            padding: 24,
+            overflow: 'auto',
+            background: 'var(--color-bg-page)',
+          }}
+        >
           <Outlet />
-        </main>
-      </div>
-    </div>
+        </Content>
+      </Layout>
+    </Layout>
   );
 }
 
