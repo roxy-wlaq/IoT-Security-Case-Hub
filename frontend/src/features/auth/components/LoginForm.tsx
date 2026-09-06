@@ -14,7 +14,6 @@ const DEFAULT_VALUES: LoginFormValues = { username: '', password: '' };
 
 export function LoginForm({ onSuccess }: LoginFormProps) {
   const loginMutation = useLogin();
-  const [values, setValues] = useState<LoginFormValues>(DEFAULT_VALUES);
   const [errors, setErrors] = useState<Partial<Record<keyof LoginFormValues, string>>>({});
 
   const submitError = loginMutation.error ? toApiError(loginMutation.error) : null;
@@ -30,7 +29,6 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
       username: formData.get('username')?.toString() ?? '',
       password: formData.get('password')?.toString() ?? '',
     };
-    setValues(formValues);
 
     const parsed = loginSchema.safeParse(formValues);
     if (!parsed.success) {
@@ -79,9 +77,8 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
       >
         <Input
           name="username"
-          value={values.username}
+          defaultValue={DEFAULT_VALUES.username}
           disabled={loginMutation.isPending}
-          onChange={(event) => setValues((current) => ({ ...current, username: event.target.value }))}
           autoComplete="username"
           placeholder="请输入用户名"
           autoFocus
@@ -96,9 +93,8 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
       >
         <Input.Password
           name="password"
-          value={values.password}
+          defaultValue={DEFAULT_VALUES.password}
           disabled={loginMutation.isPending}
-          onChange={(event) => setValues((current) => ({ ...current, password: event.target.value }))}
           autoComplete="current-password"
           placeholder="请输入密码"
         />
