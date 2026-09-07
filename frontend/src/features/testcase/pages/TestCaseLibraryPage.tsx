@@ -268,7 +268,7 @@ export function TestCaseLibraryPage() {
       subtitle="Master Test Case 库、版本与生命周期"
       extra={
         <PermissionGuard permission="test_case:draft_create">
-          <Button type="primary" onClick={() => navigate('/test-cases/new')}>新建 Draft</Button>
+          <Button type="primary" onClick={() => navigate('/test-cases/new')}>新建草稿</Button>
         </PermissionGuard>
       }
     >
