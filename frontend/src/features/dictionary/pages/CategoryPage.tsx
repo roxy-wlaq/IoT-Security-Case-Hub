@@ -78,6 +78,13 @@ function CategoryFormModal({ open, editing, presetParent, parentOptions, onClose
     reset(defaultValues);
   }, [defaultValues, reset]);
 
+  useEffect(() => {
+    if (open) {
+      createMutation.reset();
+      updateMutation.reset();
+    }
+  }, [open, createMutation, updateMutation]);
+
   const parentIdValue = watch('parentId');
   const enabledValue = watch('enabled');
   const sortOrderValue = watch('sortOrder');
@@ -117,6 +124,10 @@ function CategoryFormModal({ open, editing, presetParent, parentOptions, onClose
     [parentOptions],
   );
 
+  const errorDetail = submitError.isReportable
+    ? ` [HTTP ${submitError.status}]${submitError.traceId ? ` traceId: ${submitError.traceId}` : ''}`
+    : '';
+
   return (
     <Modal
       title={
@@ -128,86 +139,99 @@ function CategoryFormModal({ open, editing, presetParent, parentOptions, onClose
       }
       open={open}
       onCancel={onClose}
-      confirmLoading={pending}
-      onOk={onSubmit}
-      okText={isEditing ? '保存' : '创建'}
-      cancelText="取消"
+      footer={null}
       destroyOnClose
       maskClosable={false}
     >
-      {submitError ? (
-        <Alert style={{ marginBottom: 16 }} type="error" showIcon message={submitError.userMessage} />
-      ) : null}
+      <form onSubmit={onSubmit}>
+        {submitError ? (
+          <Alert
+            style={{ marginBottom: 16 }}
+            type="error"
+            showIcon
+            message={`${submitError.userMessage}${errorDetail}`}
+          />
+        ) : null}
 
-      <Form layout="vertical" requiredMark>
-        {level === 2 ? (
+        <Form layout="vertical" requiredMark>
+          {level === 2 ? (
+            <Form.Item
+              label="父分类"
+              required
+              validateStatus={errors.parentId ? 'error' : undefined}
+              help={errors.parentId?.message}
+            >
+              <TreeSelect
+                value={parentIdValue ?? undefined}
+                onChange={(value: string | null) => setValue('parentId', value ?? null, { shouldValidate: true })}
+                treeData={treeData}
+                placeholder="请选择一级父分类"
+                treeDefaultExpandAll
+                allowClear
+                disabled={pending}
+              />
+            </Form.Item>
+          ) : null}
+
           <Form.Item
-            label="父分类"
+            label="编码"
             required
-            validateStatus={errors.parentId ? 'error' : undefined}
-            help={errors.parentId?.message}
+            validateStatus={errors.code ? 'error' : undefined}
+            help={errors.code?.message}
           >
-            <TreeSelect
-              value={parentIdValue ?? undefined}
-              onChange={(value: string | null) => setValue('parentId', value ?? null, { shouldValidate: true })}
-              treeData={treeData}
-              placeholder="请选择一级父分类"
-              treeDefaultExpandAll
-              allowClear
+            <Input {...register('code')} placeholder="例如 CAT-001" disabled={pending} />
+          </Form.Item>
+
+          <Form.Item
+            label="名称"
+            required
+            validateStatus={errors.name ? 'error' : undefined}
+            help={errors.name?.message}
+          >
+            <Input {...register('name')} placeholder="请输入名称" disabled={pending} />
+          </Form.Item>
+
+          <Form.Item
+            label="排序"
+            validateStatus={errors.sortOrder ? 'error' : undefined}
+            help={errors.sortOrder?.message}
+          >
+            <InputNumber
+              value={sortOrderValue}
+              onChange={(value) => setValue('sortOrder', Number(value ?? 0), { shouldValidate: true })}
+              min={0}
+              precision={0}
+              disabled={pending}
+              style={{ width: '100%' }}
+            />
+          </Form.Item>
+
+          <Form.Item
+            label="描述"
+            validateStatus={errors.description ? 'error' : undefined}
+            help={errors.description?.message}
+          >
+            <Input.TextArea {...register('description')} rows={3} placeholder="可选" disabled={pending} />
+          </Form.Item>
+
+          <Form.Item label="启用状态">
+            <Switch
+              checked={enabledValue}
+              onChange={(checked) => setValue('enabled', checked)}
               disabled={pending}
             />
           </Form.Item>
-        ) : null}
+        </Form>
 
-        <Form.Item
-          label="编码"
-          required
-          validateStatus={errors.code ? 'error' : undefined}
-          help={errors.code?.message}
-        >
-          <Input {...register('code')} placeholder="例如 CAT-001" disabled={pending} />
-        </Form.Item>
-
-        <Form.Item
-          label="名称"
-          required
-          validateStatus={errors.name ? 'error' : undefined}
-          help={errors.name?.message}
-        >
-          <Input {...register('name')} placeholder="请输入名称" disabled={pending} />
-        </Form.Item>
-
-        <Form.Item
-          label="排序"
-          validateStatus={errors.sortOrder ? 'error' : undefined}
-          help={errors.sortOrder?.message}
-        >
-          <InputNumber
-            value={sortOrderValue}
-            onChange={(value) => setValue('sortOrder', Number(value ?? 0), { shouldValidate: true })}
-            min={0}
-            precision={0}
-            disabled={pending}
-            style={{ width: '100%' }}
-          />
-        </Form.Item>
-
-        <Form.Item
-          label="描述"
-          validateStatus={errors.description ? 'error' : undefined}
-          help={errors.description?.message}
-        >
-          <Input.TextArea {...register('description')} rows={3} placeholder="可选" disabled={pending} />
-        </Form.Item>
-
-        <Form.Item label="启用状态">
-          <Switch
-            checked={enabledValue}
-            onChange={(checked) => setValue('enabled', checked)}
-            disabled={pending}
-          />
-        </Form.Item>
-      </Form>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 24 }}>
+          <Button onClick={onClose} disabled={pending}>
+            取消
+          </Button>
+          <Button type="primary" htmlType="submit" loading={pending}>
+            {isEditing ? '保存' : '创建'}
+          </Button>
+        </div>
+      </form>
     </Modal>
   );
 }
