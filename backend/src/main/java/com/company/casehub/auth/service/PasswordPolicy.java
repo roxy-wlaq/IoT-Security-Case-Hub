@@ -6,15 +6,20 @@ import org.springframework.stereotype.Component;
 
 /**
  * V1 password rules (Security & RBAC Detail):
- *  - length 12..128
+ *  - length 6..128
  *  - not blank / not all whitespace
  *  - not equal to the username (case-insensitive)
  * Violations raise {@code PASSWORD_POLICY_VIOLATION} (400).
+ *
+ * Note: admin-issued passwords (create user / admin reset) and self
+ * change-password share this policy. The create/reset flows rely solely on
+ * this minimum; the self change-password endpoint additionally enforces the
+ * same floor via its request DTO {@code @Size} constraint.
  */
 @Component
 public class PasswordPolicy {
 
-    public static final int MIN_LENGTH = 12;
+    public static final int MIN_LENGTH = 6;
     public static final int MAX_LENGTH = 128;
 
     public void validate(String rawPassword, String username) {

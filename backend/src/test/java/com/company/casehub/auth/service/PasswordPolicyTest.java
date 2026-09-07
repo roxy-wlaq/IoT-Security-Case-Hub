@@ -26,7 +26,8 @@ class PasswordPolicyTest {
 
     @Test
     void rejectsTooShort() {
-        assertThatThrownBy(() -> policy.validate("short1", "alice"))
+        // 5 chars < MIN_LENGTH (6) must still be rejected
+        assertThatThrownBy(() -> policy.validate("abc12", "alice"))
                 .isInstanceOf(CaseHubException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.PASSWORD_POLICY_VIOLATION);
     }
