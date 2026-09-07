@@ -1,5 +1,5 @@
 import { Alert, Button, Form, Input } from 'antd';
-import { useState, type FormEvent } from 'react';
+import { useState } from 'react';
 import { useLogin } from '@/features/auth/hooks/useLogin';
 import { loginSchema } from '@/features/auth/schemas/authSchemas';
 import type { LoginFormValues } from '@/features/auth/schemas/authSchemas';
@@ -14,23 +14,17 @@ const DEFAULT_VALUES: LoginFormValues = { username: '', password: '' };
 
 export function LoginForm({ onSuccess }: LoginFormProps) {
   const loginMutation = useLogin();
+  const [form] = Form.useForm<LoginFormValues>();
   const [errors, setErrors] = useState<Partial<Record<keyof LoginFormValues, string>>>({});
 
   const submitError = loginMutation.error ? toApiError(loginMutation.error) : null;
 
-  const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  const onFinish = async (values: LoginFormValues) => {
     if (loginMutation.isPending) {
       return;
     }
 
-    const formData = new FormData(event.currentTarget);
-    const formValues: LoginFormValues = {
-      username: formData.get('username')?.toString() ?? '',
-      password: formData.get('password')?.toString() ?? '',
-    };
-
-    const parsed = loginSchema.safeParse(formValues);
+    const parsed = loginSchema.safeParse(values);
     if (!parsed.success) {
       const nextErrors: Partial<Record<keyof LoginFormValues, string>> = {};
       for (const issue of parsed.error.issues) {
@@ -42,6 +36,7 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
       setErrors(nextErrors);
       return;
     }
+
     setErrors({});
     loginMutation.reset();
     try {
@@ -53,7 +48,14 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
   };
 
   return (
-    <form className="ant-form ant-form-vertical ant-form-hide-required-mark" onSubmit={onSubmit}>
+    <Form
+      form={form}
+      layout="vertical"
+      requiredMark="optional"
+      initialValues={DEFAULT_VALUES}
+      onFinish={onFinish}
+      autoComplete="on"
+    >
       {submitError ? (
         <Form.Item style={{ marginBottom: 16 }}>
           <Alert
@@ -61,7 +63,8 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
             showIcon
             message={submitError.userMessage}
             description={
-              submitError.traceId && (submitError.code === API_ERROR_CODES.NETWORK_ERROR || submitError.status >= 500)
+              submitError.traceId &&
+              (submitError.code === API_ERROR_CODES.NETWORK_ERROR || submitError.status >= 500)
                 ? `traceId：${submitError.traceId}`
                 : undefined
             }
@@ -71,13 +74,12 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
 
       <Form.Item
         label="用户名"
+        name="username"
+        required
         validateStatus={errors.username ? 'error' : undefined}
         help={errors.username}
-        required
       >
         <Input
-          name="username"
-          defaultValue={DEFAULT_VALUES.username}
           disabled={loginMutation.isPending}
           autoComplete="username"
           placeholder="请输入用户名"
@@ -87,13 +89,12 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
 
       <Form.Item
         label="密码"
+        name="password"
+        required
         validateStatus={errors.password ? 'error' : undefined}
         help={errors.password}
-        required
       >
         <Input.Password
-          name="password"
-          defaultValue={DEFAULT_VALUES.password}
           disabled={loginMutation.isPending}
           autoComplete="current-password"
           placeholder="请输入密码"
@@ -111,7 +112,7 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
           登录
         </Button>
       </Form.Item>
-    </form>
+    </Form>
   );
 }
 
