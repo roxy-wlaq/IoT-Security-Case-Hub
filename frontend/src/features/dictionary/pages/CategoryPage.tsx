@@ -125,7 +125,7 @@ function CategoryFormModal({ open, editing, presetParent, parentOptions, onClose
     [parentOptions],
   );
 
-  const errorDetail = submitError.isReportable
+  const errorDetail = submitError?.isReportable
     ? ` [HTTP ${submitError.status}]${submitError.traceId ? ` traceId: ${submitError.traceId}` : ''}`
     : '';
 
