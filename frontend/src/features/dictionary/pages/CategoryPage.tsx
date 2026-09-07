@@ -9,6 +9,7 @@ import { toApiError } from '@/shared/api/apiError';
 import { useCategories, useCreateCategory, useUpdateCategory } from '@/features/dictionary/hooks/useCategories';
 import { CATEGORY_FORM_DEFAULTS, categorySchema } from '@/features/dictionary/schemas/categorySchema';
 import type { CategoryFormValues } from '@/features/dictionary/schemas/categorySchema';
+import { computeNextCategoryCode } from '@/features/dictionary/utils/categoryCode';
 import type { Category, CategoryLevel } from '@/shared/types/dictionary';
 
 const CATEGORY_MANAGE_PERMISSION = 'category:manage';
@@ -28,10 +29,12 @@ interface CategoryFormModalProps {
   presetParent: Category | null;
   /** 一级分类列表，供二级分类选择父分类 */
   parentOptions: Category[];
+  /** 全量分类（含二级子类），用于推导下一个可用编码 */
+  allCategories: Category[];
   onClose: () => void;
 }
 
-function CategoryFormModal({ open, editing, presetParent, parentOptions, onClose }: CategoryFormModalProps) {
+function CategoryFormModal({ open, editing, presetParent, parentOptions, allCategories, onClose }: CategoryFormModalProps) {
   const createMutation = useCreateCategory();
   const updateMutation = useUpdateCategory();
 
@@ -44,6 +47,8 @@ function CategoryFormModal({ open, editing, presetParent, parentOptions, onClose
   const level: CategoryLevel = editing ? editing.level : presetParent ? 2 : 1;
 
   const defaultValues: CategoryFormValues = useMemo(() => {
+    // 新建（一级/二级）时自动补充下一个编码，用户仍可手动修改
+    const nextCode = computeNextCategoryCode(allCategories);
     if (editing) {
       return {
         code: editing.code,
@@ -56,10 +61,10 @@ function CategoryFormModal({ open, editing, presetParent, parentOptions, onClose
       };
     }
     if (presetParent) {
-      return { ...CATEGORY_FORM_DEFAULTS, level: 2, parentId: presetParent.id };
+      return { ...CATEGORY_FORM_DEFAULTS, code: nextCode, level: 2, parentId: presetParent.id };
     }
-    return CATEGORY_FORM_DEFAULTS;
-  }, [editing, presetParent]);
+    return { ...CATEGORY_FORM_DEFAULTS, code: nextCode };
+  }, [editing, presetParent, allCategories]);
 
   const {
     register,
@@ -178,7 +183,7 @@ function CategoryFormModal({ open, editing, presetParent, parentOptions, onClose
             label="编码"
             required
             validateStatus={errors.code ? 'error' : undefined}
-            help={errors.code?.message}
+            help={errors.code?.message ?? '系统已自动生成下一个可用编码，可手动修改'}
           >
             <Input {...register('code')} placeholder="例如 CAT-001" disabled={pending} />
           </Form.Item>
@@ -395,6 +400,7 @@ export function CategoryAdminPage() {
         editing={editing}
         presetParent={presetParent}
         parentOptions={parentOptions}
+        allCategories={data ?? []}
         onClose={() => {
           setModalOpen(false);
           setEditing(null);
