@@ -89,7 +89,8 @@ function CapabilityFormModal({ open, editing, defaultParent, allCapabilities, on
   const sortOrderValue = watch('sortOrder');
 
   const pending = createMutation.isPending || updateMutation.isPending;
-  const submitError = toApiError(createMutation.error ?? updateMutation.error);
+  const rawError = createMutation.error ?? updateMutation.error;
+  const submitError = rawError ? toApiError(rawError) : null;
 
   const onSubmit = handleSubmit(async (values) => {
     const payload = {
@@ -230,7 +231,8 @@ export function CapabilityAdminPage() {
   const selected = selectedId ? findNode(tree, selectedId) : null;
 
   const togglePending = enableMutation.isPending || disableMutation.isPending;
-  const toggleError = toApiError(enableMutation.error ?? disableMutation.error);
+  const toggleRawError = enableMutation.error ?? disableMutation.error;
+  const toggleError = toggleRawError ? toApiError(toggleRawError) : null;
 
   const openCreateRoot = () => {
     setEditing(null);
@@ -293,7 +295,7 @@ export function CapabilityAdminPage() {
 
         {toggleError ? <Alert type="error" showIcon message={toggleError.userMessage} closable /> : null}
         {treeQuery.isError ? (
-          <Alert type="error" showIcon message={toApiError(treeQuery.error)?.userMessage ?? '能力树加载失败'} />
+          <Alert type="error" showIcon message={treeQuery.error ? toApiError(treeQuery.error).userMessage : '能力树加载失败'} />
         ) : null}
 
         <Row gutter={16}>

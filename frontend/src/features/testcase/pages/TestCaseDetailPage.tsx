@@ -182,7 +182,7 @@ export function TestCaseDetailPage() {
 
   if (detailQuery.isLoading) return <Spin tip="加载测试用例…" />;
   if (detailQuery.isError || !detail || !version) {
-    return <Alert type="error" showIcon message="加载测试用例失败" description={toApiError(detailQuery.error).userMessage} />;
+    return <Alert type="error" showIcon message="加载测试用例失败" description={detailQuery.error ? toApiError(detailQuery.error).userMessage : '加载失败'} />;
   }
 
   const actions = detail.allowedActions;

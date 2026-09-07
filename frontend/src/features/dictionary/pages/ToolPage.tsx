@@ -67,7 +67,8 @@ function ToolFormModal({ open, editing, onClose }: ToolFormModalProps) {
   const enabledValue = watch('enabled');
 
   const pending = createMutation.isPending || updateMutation.isPending;
-  const submitError = toApiError(createMutation.error ?? updateMutation.error);
+  const rawError = createMutation.error ?? updateMutation.error;
+  const submitError = rawError ? toApiError(rawError) : null;
 
   const onSubmit = handleSubmit(async (values) => {
     const trimOptional = (value: string | undefined) => (value && value.trim() ? value.trim() : undefined);

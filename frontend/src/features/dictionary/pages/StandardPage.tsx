@@ -72,7 +72,8 @@ function StandardFormModal({ open, editing, onClose }: StandardFormModalProps) {
   const typeValue = watch('type');
 
   const pending = createMutation.isPending || updateMutation.isPending;
-  const submitError = toApiError(createMutation.error ?? updateMutation.error);
+  const rawError = createMutation.error ?? updateMutation.error;
+  const submitError = rawError ? toApiError(rawError) : null;
 
   const onSubmit = handleSubmit(async (values) => {
     const payload = {

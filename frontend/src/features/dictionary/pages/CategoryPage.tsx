@@ -90,7 +90,8 @@ function CategoryFormModal({ open, editing, presetParent, parentOptions, onClose
   const sortOrderValue = watch('sortOrder');
 
   const pending = createMutation.isPending || updateMutation.isPending;
-  const submitError = toApiError(createMutation.error ?? updateMutation.error);
+  const rawError = createMutation.error ?? updateMutation.error;
+  const submitError = rawError ? toApiError(rawError) : null;
 
   const onSubmit = handleSubmit(async (values) => {
     // 不发送 level：服务端从 parentId 推导

@@ -65,7 +65,8 @@ export function DecisionPointEditor({ masterId, versionId, readOnly }: Props) {
   const targetCountAllowed = draft.transitionType === 'PASS' || draft.transitionType === 'FAIL' || draft.transitionType === 'N_A' ? 0 : draft.transitionType === 'NEXT_CASE' ? 1 : 999;
   const targetIds = targetCountAllowed === 0 ? [] : draft.targetMasterTestCaseIds;
 
-  if (pointsQuery.isError || graphQuery.isError) return <Alert type="error" message="逻辑图加载失败" description={toApiError(pointsQuery.error ?? graphQuery.error).userMessage} />;
+  const queryError = pointsQuery.error ?? graphQuery.error;
+  if (pointsQuery.isError || graphQuery.isError) return <Alert type="error" message="逻辑图加载失败" description={queryError ? toApiError(queryError).userMessage : '加载失败'} />;
   return <Card title="Decision Points / Master Logic Graph" extra={!readOnly ? <Button type="primary" onClick={openCreate}>添加 Decision Point</Button> : <Tag>只读</Tag>}>
     <Space direction="vertical" style={{ width: '100%' }} size="large">
       {points.length ? <List bordered dataSource={points} renderItem={(point) => <List.Item actions={readOnly ? [] : [<Button key="edit" type="link" onClick={() => openEdit(point)}>编辑</Button>, <Button key="delete" type="link" danger onClick={() => remove(point.id)}>删除</Button>]}>

@@ -308,7 +308,7 @@ export function TestCaseLibraryPage() {
           type="error"
           showIcon
           message="加载失败"
-          description={toApiError(query.error).userMessage}
+          description={query.error ? toApiError(query.error).userMessage : '加载失败'}
           action={<Button onClick={() => void query.refetch()}>重试</Button>}
           style={{ marginBottom: token.padding }}
         />
