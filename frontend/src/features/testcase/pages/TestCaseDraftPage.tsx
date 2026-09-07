@@ -48,7 +48,7 @@ export function TestCaseDraftPage() {
   if (!isCreate && detailQuery.isLoading) return <Typography.Text>加载中…</Typography.Text>;
   return <div>
     <Button type="link" onClick={() => navigate('/test-cases')}>返回测试库</Button>
-    <Typography.Title level={3}>{isCreate ? '新建测试用例 Draft' : '编辑测试用例 Draft'}</Typography.Title>
+    <Typography.Title level={3}>{isCreate ? '新建测试用例草稿' : '编辑测试用例草稿'}</Typography.Title>
     {error ? <Alert type="error" showIcon message={toApiError(error).userMessage} style={{ marginBottom: 16 }} /> : null}
     <Card><TestCaseDraftForm initialValues={initialValues} isCreate={isCreate} readOnly={!isCreate && !detailQuery.data?.allowedActions.editDraft}
       onSubmit={onSubmit} pending={createMutation.isPending || updateMutation.isPending} {...formOptions} /></Card>

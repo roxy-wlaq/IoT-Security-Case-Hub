@@ -77,7 +77,7 @@ export function TestCaseDraftForm({ initialValues, isCreate = false, readOnly = 
         <Input placeholder="映射备注" defaultValue={mapping.mappingNote ?? ''} {...register(`standardMappings.${index}.mappingNote`)} disabled={disabled} />
         {!disabled ? <Button onClick={() => removeMapping(index)}>移除映射</Button> : null}
       </Space>)}
-      {!readOnly ? <Button type="primary" htmlType="submit" loading={pending}>保存 Draft</Button> : null}
+      {!readOnly ? <Button type="primary" htmlType="submit" loading={pending}>保存草稿</Button> : null}
     </Form>
   );
 }

@@ -122,7 +122,7 @@ export function TestCaseDetailPage() {
     switch (pending) {
       case 'submitReview':
         if (!detail.draftVersion) {
-          message.error('没有可提交的 Draft');
+          message.error('没有可提交的草稿');
           return;
         }
         submitReviewMut.mutate({ masterId: detail.id, payload: { comment: trimmed } }, { onSuccess: () => onOk('已提交评审'), onError: onErr });
@@ -191,7 +191,7 @@ export function TestCaseDetailPage() {
     <Space direction="vertical" size="large" style={{ width: '100%' }}>
       <Space wrap>
         <Button type="link" onClick={() => navigate('/test-cases')}>返回测试库</Button>
-        {actions.editDraft ? <Button type="primary" onClick={() => navigate(`/test-cases/${masterId}/edit`)}>编辑 Draft</Button> : null}
+        {actions.editDraft ? <Button type="primary" onClick={() => navigate(`/test-cases/${masterId}/edit`)}>编辑草稿</Button> : null}
         {actions.submitReview ? <Button onClick={() => { setComment(''); setPending('submitReview'); }}>提交评审</Button> : null}
         {actions.publish ? <Button type="primary" onClick={() => { setComment(''); setPending('publish'); }}>发布</Button> : null}
         {actions.returnReview ? <Button onClick={() => { setComment(''); setPending('returnReview'); }}>退回修改</Button> : null}
