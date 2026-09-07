@@ -25,9 +25,9 @@ function AuthShell({ children }: { children: ReactNode }) {
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        gap: token.padding,
+        gap: token.paddingLG,
         background: 'var(--color-bg-page)',
-        padding: 16,
+        padding: 24,
         position: 'relative',
       }}
     >
@@ -41,12 +41,27 @@ function AuthShell({ children }: { children: ReactNode }) {
       <Card
         bordered={false}
         style={{ width: 400, maxWidth: '100%', boxShadow: token.boxShadowSecondary }}
-        title={<BrandLogo size={30} />}
+        styles={{ body: { padding: token.paddingLG } }}
       >
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            textAlign: 'center',
+            gap: 4,
+            marginBottom: token.paddingLG,
+          }}
+        >
+          <BrandLogo size={44} />
+          <Typography.Text type="secondary" style={{ fontSize: token.fontSizeSM }}>
+            IoT 安全测试用例管理平台
+          </Typography.Text>
+        </div>
         {children}
       </Card>
       <Typography.Text type="secondary" style={{ fontSize: token.fontSizeSM }}>
-        IoT Case Hub · IoT 安全测试用例管理平台
+        © IoT Case Hub · 企业级 IoT 安全测试中枢
       </Typography.Text>
     </div>
   );
