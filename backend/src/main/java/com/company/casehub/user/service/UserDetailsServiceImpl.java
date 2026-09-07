@@ -37,7 +37,11 @@ public class UserDetailsServiceImpl implements UserDetailsService {
     @Override
     @Transactional(readOnly = true)
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
-        UserEntity user = userRepository.findByUsernameIgnoreCase(username)
+        // Case-sensitive lookup: the login credential must match the stored
+        // username exactly (case matters). The DB also enforces case-insensitive
+        // uniqueness (uq_users_username_lower), so only one canonical casing can
+        // ever exist for a given user — making exact-match login unambiguous.
+        UserEntity user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found: " + username));
 
         Set<String> roles = new HashSet<>();
